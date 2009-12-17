@@ -1,0 +1,2 @@
+#!/bin/bash
+ping -c 1 $1 > /dev/null 2>&1 && echo "Alive" || echo "Dead"

@@ -1,0 +1,4 @@
+#!/bin/zsh
+bbc_count=$( print -l /vol/TV/TVoD/iPlayer/**/*.(mp4|mov)(.) | wc -l )
+itv_count=$( print -l /vol/TV/TVoD/itv/**/*.asf(.) | wc -l )
+print $(( $bbc_count + $itv_count ))

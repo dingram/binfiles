@@ -1,0 +1,60 @@
+#!/bin/bash
+
+NOKBD=1
+if [[ "$1" == "kbd" ]]; then
+  shift
+  NOKBD=0
+fi
+
+if [[ "$1" == "until" ]]; then
+  shift
+  waketime="until "
+fi
+
+waketime="$waketime$1"
+
+if [[ $NOKBD == 0 ]]; then
+  # have to kill off the G-15 daemon so we can kill off the backlight
+  gksudo -m 'Sleepytime. Enter user password below:' /etc/init.d/g15daemon stop || exit 1
+fi
+
+# CPU to low powersaving clocking mode
+CPUMODE=`cpufreqd-get | grep -i sleepytime | head -n1 | sed -re 's/.*\(#([0-9]+)\).*/\1/'`
+if [[ -n "${CPUMODE}" ]]; then
+  echo "Sleepymode: ${CPUMODE}"
+  cpufreqd-set manual
+  cpufreqd-set $CPUMODE
+fi
+
+# display an informative message
+~/bin/osd_echo "Sleepytime..."
+
+if [[ $NOKBD == 0 ]]; then
+  # turn off the keyboard backlight
+  /vol/public/g-15/cmd_utils/g15_backlight off
+fi
+
+# turn off the screens
+xset dpms force off
+
+# wait until wakeup time
+if [[ -n "$waketime" ]]; then
+  delay -C $waketime
+fi
+
+# CPU back to normal clocking mode
+cpufreqd-set dynamic
+
+# turn on the screens
+xset -dpms
+
+if [[ $NOKBD == 0 ]]; then
+  # remove sudo credentials
+  sudo -k
+
+  # re-enable the G-15 daemon
+  gksudo -m 'Re-enable keyboard... enter user password below:' /etc/init.d/g15daemon start
+
+  # sometimes it doesn't work properly
+  sudo /etc/init.d/g15daemon start
+fi

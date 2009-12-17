@@ -1,0 +1,1 @@
+date --date="`cat /usr/portage/metadata/timestamp.chk`" +%c

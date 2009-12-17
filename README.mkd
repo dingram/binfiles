@@ -4,6 +4,8 @@ Introduction
 A brief description of many of the scripts included in this repository. This is
 not guaranteed to be up-to-date!
 
+**Note:** these scripts are likely to only be useful for me personally.
+
 The Scripts
 ===========
 

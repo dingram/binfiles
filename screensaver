@@ -1,0 +1,39 @@
+#!/bin/bash
+
+killall osd_cat > /dev/null 2>&1
+
+COLOUR="green"
+
+ps aux | grep xscreensaver | grep -qv grep
+noscreensaver=$?
+
+case $1 in
+  enable)
+    if [[ $noscreensaver -eq 1 ]]; then
+      MSG="Screensaver enabled"
+      #xscreensaver -nosplash &
+    else
+      COLOUR="red"
+      MSG="Scrensaver already enabled"
+    fi
+  ;;
+  disable)
+    if [[ $noscreensaver -eq 0 ]]; then
+      MSG="Screensaver disabled"
+      #xscreensaver-command -exit
+    else
+      COLOUR="red"
+      MSG="Scrensaver already disabled"
+    fi
+  ;;
+  lock)
+    [[ $noscreensaver -eq 1 ]] && ( xscreensaver -nosplash & )
+    #xscreensaver-command -lock
+    xlock
+  ;;
+  *)
+    MSG="Unknown command \"$1\""
+  ;;
+esac
+
+[[ -n "$MSG" ]] && echo "$MSG" | osd_cat --pos=bottom --align=center --offset=30 --indent=0 --colour=$COLOUR --delay=2

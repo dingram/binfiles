@@ -1,0 +1,6 @@
+#!/bin/bash
+
+length=`mplayer -frames 0 -vo null -ao null -identify "$1" | grep ID_LENGTH | cut -c11-`
+frameno=`echo "$length*0.05" | bc`
+mplayer -really-quiet -vo png:z=9 -ss ${frameno} -frames 2 -nosound -noloop "$1" > /dev/null
+mv 00000001.png "${1}-thumb.png"

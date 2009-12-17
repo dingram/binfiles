@@ -1,0 +1,194 @@
+#!/bin/bash
+##############################################################################
+# Multimedia control script
+##############################################################################
+# Auto-detects which media player I want to use and sends it the appropriate
+# command
+##############################################################################
+
+media_player=
+dcop_cmd=`which dcop`
+if [[ -z "${dcop_cmd}" ]]; then
+  dcop_cmd=/usr/bin/kde/3.5/dcop
+fi
+
+if [[ -n "$("$dcop_cmd" 2>/dev/null | grep -i amarok)" ]]; then
+  media_player=amarok
+elif [[ -n "$(pgrep mpd)" ]]; then
+  media_player=mpd
+else
+  echo "$0: Unknown media player or no media player running"
+  exit 1
+fi
+
+if [[ "$#" == 0 ]]; then
+  echo "You are running $media_player. I do need a command though."
+  exit 0
+fi
+
+cmd="$1"
+shift
+
+##############################################################################
+# Commands
+###########
+
+#########
+# Amarok
+#########
+
+amarok_play() {
+  exec "${dcop_cmd}" amarok player play
+}
+
+amarok_toggle() {
+  amarok_playPause
+}
+
+amarok_playPause() {
+  exec "${dcop_cmd}" amarok player playPause
+}
+
+amarok_pause() {
+  exec "${dcop_cmd}" amarok player pause
+}
+
+amarok_stop() {
+  exec "${dcop_cmd}" amarok player stop
+}
+
+amarok_prev() {
+  exec "${dcop_cmd}" amarok player prev
+}
+
+amarok_next() {
+  exec "${dcop_cmd}" amarok player next
+}
+
+amarok_random() {
+  case "$1" in
+    0|false|off)
+      # shuffle off
+      exec "${dcop_cmd}" amarok player enableRandomMode 0
+      ;;
+    1|true|on)
+      # shuffle on
+      exec "${dcop_cmd}" amarok player enableRandomMode 1
+      ;;
+    *)
+      # complicated shuffle toggle
+      if [[ "$("${dcop_cmd}" amarok player randomModeStatus)" == "false" ]]; then
+        exec "${dcop_cmd}" amarok player enableRandomMode 1
+      else
+        exec "${dcop_cmd}" amarok player enableRandomMode 0
+      fi
+      ;;
+  esac
+}
+
+amarok_shuffle() {
+  amarok_random "$@"
+}
+
+amarok_repeat() {
+  case "$1" in
+    0|false|off)
+      # repeat off
+      exec "${dcop_cmd}" amarok player enableRepeatPlaylist 0
+      ;;
+    1|true|on)
+      # repeat on
+      exec "${dcop_cmd}" amarok player enableRepeatPlaylist 1
+      ;;
+    *)
+      # complicated repeat toggle
+      if [[ "$("${dcop_cmd}" amarok player repeatPlaylistStatus)" == "false" ]]; then
+        exec "${dcop_cmd}" amarok player enableRepeatPlaylist 1
+      else
+        exec "${dcop_cmd}" amarok player enableRepeatPlaylist 0
+      fi
+      ;;
+  esac
+}
+
+######
+# MPD
+######
+
+mpd_play() {
+  exec mpc play
+}
+
+mpd_toggle() {
+  exec mpc playPause
+}
+
+mpd_playPause() {
+  mpd_toggle
+}
+
+mpd_pause() {
+  exec mpc pause
+}
+
+mpd_stop() {
+  exec mpc stop
+}
+
+mpd_prev() {
+  exec mpc prev
+}
+
+mpd_next() {
+  exec mpc next
+}
+
+mpd_random() {
+  case "$1" in
+    0|false|off)
+      # shuffle off
+      exec mpc random off
+      ;;
+    1|true|on)
+      # shuffle on
+      exec mpc random on
+      ;;
+    *)
+      # toggle shuffle
+      exec mpc random
+      ;;
+  esac
+}
+
+mpd_shuffle() {
+  amarok_random "$@"
+}
+
+mpd_repeat() {
+  case "$1" in
+    0|false|off)
+      # repeat off
+      exec mpc repeat off
+      ;;
+    1|true|on)
+      # repeat on
+      exec mpc repeat on
+      ;;
+    *)
+      # toggle repeat
+      exec mpc repeat
+      ;;
+  esac
+}
+
+##############################################################################
+# Run command
+##############
+
+if ! type -t "${media_player}_${cmd}" &>/dev/null; then
+  echo "Don't know how to \"$cmd\" for $media_player!"
+  exit 1
+fi
+
+echo "${media_player}_${cmd} $@"
+${media_player}_${cmd} "$@"

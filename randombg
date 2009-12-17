@@ -1,0 +1,25 @@
+#!/usr/bin/perl -w
+
+my $res=`xdpyinfo | grep dimens | sed -r 's/ +/ /g' | cut -d' ' -f3`;
+chomp $res;
+if (-d "$ENV{'HOME'}/.fluxbox/backgrounds/$res") {
+  my @imagelist = `find ~/.fluxbox/backgrounds/$res -maxdepth 1 -type f`;
+  #my @imagelist2 = `find ~/.fluxbox/backgrounds/any -maxdepth 1 -type f`;
+  #push(@imagelist, @imagelist2);
+
+  #  Randomly select one
+  my $myimage = $imagelist[rand(scalar(@imagelist))];
+  chomp($myimage);
+  if ($myimage ne '') {
+    printf STDERR "Loading $myimage on root window ... ";
+
+    my $cmd = "fbsetbg -a $myimage";
+
+    system($cmd);
+    printf STDERR "done\n";
+  } else {
+    printf STDERR "Could not find any images for $res\n";
+  }
+} else {
+  printf STDERR "No image directory exists for $res\n";
+}
