@@ -1,0 +1,63 @@
+#!/usr/bin/perl -w
+use LWP::UserAgent;
+
+$ua = LWP::UserAgent->new;
+$req = HTTP::Request->new(GET => 'http://192.168.0.1/setup.cgi?todo=nbtscan&next_file=devices.htm');
+$req->authorization_basic('admin', $ARGV[0]);
+$tmp="/var/tmp/.tmp_file_" . `date +%s`;
+open TMP, ">$tmp";
+print TMP $ua->request($req)->as_string;
+close TMP;
+open FILE, "<$tmp";
+#if ($#ARGV < 0) {
+#  open FILE, "curl 'http://192.168.0.1/setup.cgi?todo=nbtscan&next_file=devices.htm' -u 'admin:$ARGV[0]' 2>/dev/null |";
+#} else {
+#  open FILE, $ARGV[0];
+#}
+
+$c1=1;
+$c2=5;
+$c3=21;
+$c4=39;
+
+print chr(27), "[2J";
+print chr(27), "[H";
+print "No.", chr(27), "[1;${c2}f| IP Address", chr(27), "[1;${c3}f| Name", chr(27), "[1;${c4}f| MAC Address\n";
+print "----|---------------|-----------------|-------------------";
+
+$lineno=3;
+$charpos=1;
+
+while (<FILE>) {
+  next if ($.<=61);
+  s/<[^>]+>//g;
+  s/&[^;]+;//g;
+  s/^\s+//;
+  next if ($_ eq "");
+  chomp;
+  
+  print chr(27), "[${lineno};${charpos}f";
+  print "| " unless ($charpos==1);
+  if (/^UNKNOWN$/) {
+    print chr(27), "[0;41m";
+    print "    UNKNOWN    ";
+    print chr(27), "[0m";
+  } else {
+    print;
+  }
+  
+  if ($_ =~ /^[0-9A-F][0-9A-F]:[0-9A-F][0-9A-F]:[0-9A-F][0-9A-F]:[0-9A-F][0-9A-F]:[0-9A-F][0-9A-F]:[0-9A-F][0-9A-F]$/) {
+    #print "\n";
+    $lineno++;
+    $charpos=1;
+  } else {
+    #print "\t";
+    if ($charpos==$c1) { $charpos=$c2; }
+    elsif ($charpos==$c2) { $charpos=$c3; }
+    elsif ($charpos==$c3) { $charpos=$c4; }
+    else { $charpos=$c1; }
+  }
+}
+close FILE;
+print "\n\n";
+unlink $tmp;

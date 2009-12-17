@@ -1,0 +1,20 @@
+#!/usr/bin/perl -w
+use LWP::UserAgent;
+use HTTP::Request::Common;
+use HTML::Entities;
+
+$v_num=shift;
+
+$ua = LWP::UserAgent->new;
+$res = $ua->request(GET "http://www.bash.org/?${v_num}");
+$rply = $res->content;
+if ($rply =~ /quote #[0-9]+ does not exist\./ims) {
+  print STDERR "Quote #${v_num} does not exist\n";
+  exit 1;
+}
+$rply =~ s/<br[^>]*>//imsg;
+$rply =~ s/\t/ /imsg;
+decode_entities($rply);
+
+$rply =~ s/.*<p[^>]*class="qt"[^>]*>(.*?)<\/p>.*/$1/imsg;
+print "$rply\n";

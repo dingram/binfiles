@@ -1,0 +1,99 @@
+Introduction
+============
+
+A brief description of many of the scripts included in this repository. This is
+not guaranteed to be up-to-date!
+
+The Scripts
+===========
+
+## apr ##
+
+CSH script to pretty-print code for printing in a fairly compact way.
+
+## attached ##
+
+List all devices attached to a Netgear WG584D router, with admin password as
+first argument.
+
+## autoexpect ##
+
+[Expect][] script to generate an expect script that reproduces your actions.
+
+  [expect]: http://expect.nist.gov/
+          "Tool for automating interactive applications"
+
+## autoforward.pl ##
+
+Build an exim `.forward` rule file from custom terser syntax. See also
+<http://www.dmi.me.uk/blog/2007/03/08/automatic-email-forwarding/>.
+
+## bash_quote ##
+
+Retrieve and display the bash quote with the ID given on the command line.
+
+## detectfs ##
+
+Extremely hacky method of detecting some common file system types by directly
+reading the block device. Probably requires you to be root.
+
+## extip ##
+
+Retrieve and display your external IP address.
+
+## extract ##
+
+Automatically extract an archive of any type into a subdirectory named after
+it.
+
+## fetch-ted-videos ##
+
+A very hacky method of fetching all of the videos from [TED.com](http://www.ted.com/).
+
+## gcode.pl ##
+
+Geek Code decoder.
+
+## iptables_parse.pl ##
+
+Partial parser for `iptables-save` output to make it more understandable.
+
+## netstatus ##
+
+Shows status and speed of network connections. Requires `ethtool`.
+
+## osd_echo ##
+
+Display the argument as a green text OSD at the bottom centre of the screen.
+Requires `xosd`.
+
+## revdep-query ##
+
+Look up reverse dependencies for a package in Gentoo. Written by Nick Pope.
+
+## svn-apply-git-patchset ##
+
+A fairly advanced script that will apply the output of `git format-patch` to a
+subversion repository, including commit messages. It has some limitations and
+known issues, but is usable for most common changes.
+
+## swapkbd ##
+
+Used for swapping keyboard between GB and DVORAK.
+
+## uniq.pl ##
+
+Version of `uniq` that doesn't require the list to be sorted.
+
+## url2spotify ##
+
+Simple handler for `spotify:` URIs.
+
+## voldisp ##
+
+Fetch and display current volume status (via ALSA commands) as an OSD after
+optionally modifying it (up, down, mute).
+
+----
+
+Last updated: 2009-12-17 21:21 GMT

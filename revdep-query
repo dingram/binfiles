@@ -1,0 +1,194 @@
+#!/usr/bin/perl
+################################################################################
+# Script: revdep-query
+# Author: Nick Pope <nick [plus] gentoo [at] nickpope [dot] me [dot] uk
+# Description: Looks up reverse dependencies of a package in Gentoo Linux.
+################################################################################
+# TODO:
+#   - Change to use eix database instead of gentoo-portage.com
+#   - Don't search if package previously found.
+################################################################################
+
+use strict;
+use warnings;
+
+use Getopt::Long;
+use HTTP::Status;
+use List::MoreUtils qw( any uniq );
+use LWP::UserAgent;
+
+use constant DEBUG  => 0;
+use constant SGRBLD => "\e[1m";
+use constant SGRGRN => "\e[1;32m";
+use constant SGRYEL => "\e[1;33m";
+use constant SGRRED => "\e[1;31m";
+use constant SGRRST => "\e[m";
+use constant MSGERR => SGRRED . ' * ' . SGRRST;
+use constant MSGINF => SGRGRN . ' * ' . SGRRST;
+use constant MSGWRN => SGRYEL . ' * ' . SGRRST;
+
+my (%opt, @opts);
+my (%data, @install, @stack, $branch, $package, $current);
+
+# Prototypes
+sub get_page($);
+sub extract_data($);
+sub flatten($);
+sub recurse($);
+sub check_installed();
+sub display();
+sub show_usage();
+
+# Download page from internet @ gentoo-portage.com
+sub get_page($) {
+  my $p = shift;
+  my $ua = LWP::UserAgent->new;
+  my $r = $ua->get("http://gentoo-portage.com/$p/RDep");
+  return $r->is_success ? $r->decoded_content : undef;
+}
+
+# Get reverse dependency data from a page.
+sub extract_data($) {
+  if (not defined $_[0]) {
+    print STDERR MSGERR . "Package details unavailable: ${current}\n"
+        unless $opt{'silent'};
+    delete $branch->{$current} if $opt{'silent'};
+    return -1;
+  }
+  my @lines = split /\n/, shift;
+  my @ext = ();
+  my $skip = 1;
+  # Loop over data and store reverse dependency information.
+  for (@lines) {
+    next if /^\s*$/;
+    do { $skip = 0; next } if /Reverse Dependencies/;
+    next if $skip;
+    last if /pagenote/;
+    s/^.*">([^<]*).*$/$1/;
+    push @ext, $_;
+  }
+  # Populate current branch of revdep tree with packages.
+  @{$branch->{$current}}{@ext} = (undef) x @ext;
+  return 0
+}
+
+# Flatten a hash
+sub flatten($) {
+  my $h = shift;
+  my @i = ();
+  for (keys %$h) {
+    push @i, $_;
+    push @i, @{ flatten($h->{$_}) };
+  }
+  return \@i
+}
+
+# Check which of the discovered packages are installed.
+sub check_installed() {
+  print STDERR MSGINF . "Checking for installed packages...\n";
+  my @items = uniq @{flatten \%data};
+  my $pkgstr = join ' -o -I ', @items;
+  @install = split /\n/, qx{ eix --only-names -cen -I $pkgstr };
+}
+
+
+sub recurse($) {
+  my $iterations = shift;
+  return unless $iterations;
+  for (keys %$branch) {
+    $current = $_;
+    print STDERR MSGINF . "Scanning package: ${current}\n" if DEBUG;
+    my $rc = extract_data get_page $current;
+    next if $rc < 0;
+    push @stack, $branch;
+    $branch = $branch->{$current};
+    recurse --$iterations;
+    $iterations ++;
+    $branch = pop @stack;
+  }
+}
+
+my $indent = -1;
+sub display() {
+  $indent++;
+  for (keys %$branch) {
+    $current = $_;
+    my $installed = (any { $_ eq $current } @install);
+    my $type = ($installed ? '+' : '-');
+    print +(' ' x (3 * $indent)) . ($type x 2) . ' ';
+    print SGRGRN if $installed;
+    print $current;
+    print SGRRST if $installed;
+    print "\n";
+    push @stack, $branch;
+    $branch = $branch->{$current};
+    display();
+    $branch = pop @stack;
+  }
+  $indent--;
+}
+
+sub show_usage() {
+  print <<EOT;
+
+USAGE:
+  $0 [OPTIONS] <package>
+
+EXAMPLE:
+  $0 -d 10 -s x11-base/xorg-server
+
+OPTIONS:
+  -d, --depth=NUMBER    Recursion depth.
+  -h, --help            Displays this message.
+  -s, --silent          Suppresses error messages.
+
+EOT
+}
+
+@opts = ('depth|d=i', 'help|h', 'silent|s');
+%opt = ('depth' => 3, 'silent' => 0);
+
+unless (GetOptions(\%opt, @opts)) {
+  show_usage;
+  exit 1;
+}
+
+if (defined $opt{'help'}) {
+  show_usage;
+  exit 1;
+}
+
+unless ($opt{'depth'} > 0) {
+  print STDERR MSGERR . "The depth must be greater than zero.\n";
+  exit 1;
+}
+
+if (scalar @ARGV == 0) {
+  show_usage;
+  exit 1;
+}
+
+if (scalar @ARGV > 1) {
+  print STDERR MSGERR . "You must specify a single package name only.\n";
+  exit 1;
+}
+
+$package = pop @ARGV;
+
+if (! defined $package or $package !~ /^[\w]+-[\w]+\/[-\w]+$/) {
+  print STDERR MSGERR . "Invalid package name format: $package\n";
+  exit 1;
+}
+
+$current = $package;
+$branch = \%data;
+
+print STDERR MSGINF . "Looking for reverse dependencies [ "
+                    . SGRBLD . $package . SGRRST . " ]:\n";
+print STDERR MSGWRN . "Errors will be ignored.\n" if $opt{'silent'};
+$branch->{$package} = undef;
+recurse $opt{'depth'};
+check_installed;
+display;
+
+

@@ -1,0 +1,30 @@
+#!/bin/bash
+#
+# Attempts to detect filesystem type by checking the superblocks.
+# Probably requires root user
+
+[[ `id -ur` -ne 0 ]] && echo "You must be root to check filesystems" && exit 1
+
+for dev in $*; do
+
+[[ $# -gt 1 ]] && out="${dev}: "
+id=0
+
+sb=`head -c16 ${dev} | hex | sed -e's/ //g' | cut -d. -f3`
+[[ "${sb}" == "NTFS" ]] && id=1 && echo "${out}NTFS"
+
+sb=`head -c96 ${dev} | hex | egrep "^0050 " | sed -e's/ //g' | cut -d. -f3`
+[[ "${sb}" == "FAT32" ]] && id=1 && echo "${out}FAT32"
+
+sb=`head -c1088 ${dev} | hex | egrep "^0430 " | cut -c32,33,35,36`
+[[ "${sb}" == "53ef" || "${sb}" == "51ef" ]] && id=1 && echo "${out}ext2/3"
+
+sb=`head -c4096 ${dev} | hex | egrep "^0ff0 " | sed -e 's/ //g' | cut -d. -f7`
+[[ "${sb}" == "SWAPSPACE2" || "${sb}" == "SWAP-SPACE" ]] && id=1 && echo "${out}swap space"
+
+sb=`head -c65600 ${dev} | hex | egrep "^10030 " | sed -e's/ //g' | cut -d. -f5`
+[[ "${sb}" == "ReIsEr2Fs" || "${sb}" == "ReIsErFs" ]] && id=1 && echo "${out}reiserfs"
+
+[[ $id -eq 0 ]] && echo "${out}Unknown"
+
+done

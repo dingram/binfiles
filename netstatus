@@ -1,0 +1,16 @@
+#!/bin/bash
+
+echo
+for i in `ifconfig -a | grep -r '^[^ ]' | cut -d' ' -f1 | grep eth`; do
+	et=`sudo ethtool $i`
+	lnk=`echo "$et" | grep 'Link detected' | cut -d' ' -f3`
+	spd=`echo "$et" | grep Speed | cut -d' ' -f2`
+	unt=`echo "$spd" | sed -re 's/[0-9]+([^0-9]+\/s)/\1/'`
+	spd=`echo "$spd" | sed -re 's/([0-9]+).*/\1/'`
+	if [[ "$lnk" == "yes" ]]; then
+		echo -e "\t$i: \e[1;7;32m ${spd} \e[0m\t${unt}"
+	else
+		echo -e "\t$i: \e[1;7;31;47m ${spd} \e[0m\t${unt}"
+	fi
+done
+echo

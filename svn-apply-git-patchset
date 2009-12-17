@@ -1,0 +1,577 @@
+#!/bin/bash
+##############################################################################
+# Subversion patchset importer v0.4
+# Written by David Ingram
+#
+# This program is released under the BSD licence
+##############################################################################
+
+##############################################################################
+# Help and usage
+##################
+
+usage() {
+  cat <<EOF
+Usage:  $( basename "$0" ) [options] [patch [...]]
+
+If no patches are given, searches current directory for [0-9]*.patch
+EOF
+}
+
+fullhelp() {
+  cat <<EOF
+
+ -h        Display help
+ -d        Delete patch after applying it without confirmation
+ -f        Non-interactive
+ -k        Silently skip already-applied patches
+ -C        No colour
+ -s        Squash into one subversion commit
+ -v 3, -t  Display full subversion status before each commit
+ -v 2      Default verbosity
+ -v 1, -l  Only list patch names and command output
+ -v 0, -q  Completely quiet (except for errors)
+EOF
+}
+
+##############################################################################
+# Setting variables
+#####################
+
+colour=1
+squash=0
+verbosity=2
+interactive=1
+skip_applied=0
+force_delete_patch=0
+
+# verbosity levels:
+#  0 - completely quiet
+#  1 - list patches
+#  2 - no subversion status
+#  3 - full output
+
+##############################################################################
+# Utility functions
+#####################
+
+eerror() {
+  local prefix=
+  [[ "${colour}" == "1" ]] && prefix=" [1;31m*[0m "
+  echo "${prefix}$*"
+}
+
+einfo() {
+  local prefix=
+  [[ "${colour}" == "1" ]] && prefix=" [1;32m*[0m "
+  echo "${prefix}$*"
+}
+
+ewarn() {
+  local prefix=
+  [[ "${colour}" == "1" ]] && prefix=" [1;33m*[0m "
+  echo "${prefix}$*"
+}
+
+
+##############################################################################
+# Doing the actual work
+#########################
+
+#################
+# Apply a patch
+#################
+doPatch() {
+  local patchfile="$1"
+
+  if [[ "${verbosity}" -ge 2 ]]; then
+    einfo "[${curpatch}/${patchcount}] Applying ${patchfile}"
+  elif [[ "${verbosity}" -ge 1 ]]; then
+    einfo "${patchfile}"
+  fi
+  local patchout="$( patch --dry-run -N -p1 < "${patchfile}" 2>&1 )"
+  local patchstat=$?
+  if [[ $( echo "${patchout}" | grep 'Skipping patch.' ) ]]; then
+    if [[ "${skip_applied}" == "1" || "${interactive}" == "0" ]]; then
+      ewarn "Skipping; already applied."
+      return 2
+    else
+      ewarn "Skipping; already applied. Press enter to continue."
+      local throwaway
+      read throwaway
+      return 2
+    fi
+  fi
+  if [[ "${patchstat}" -ne 0 ]]; then
+    echo "${patchout}"
+    eerror "Patch failed to apply cleanly; please review it."
+    return 1
+  fi
+
+  patchout="$( patch -N -p1 < "${patchfile}" 2>&1 )"
+  if [[ "$?" -ne 0 ]]; then
+    echo "${patchout}"
+    eerror "Patch failed to apply after dry run; please review it."
+    return 1
+  fi
+
+  if [[ "${verbosity}" -ge 3 ]]; then
+    einfo "Patch applied."
+  fi
+
+  return 0
+}
+
+revertPatch() {
+  local patchfile="$1"
+
+  einfo "Reverting ${patchfile}"
+  local patchout="$( patch --dry-run -R -N -p1 < "${patchfile}" 2>&1 )"
+  local patchstat=$?
+  if [[ $( echo "${patchout}" | grep 'Skipping patch.' ) ]]; then
+    ewarn "Skipping; already reverted."
+    return 0
+  fi
+  if [[ "${patchstat}" -ne 0 ]]; then
+    echo "${patchout}"
+    eerror "Patch failed to revert cleanly."
+    return 1
+  fi
+
+  patchout="$( patch -R -N -p1 < "${patchfile}" 2>&1 )"
+  if [[ "$?" -ne 0 ]]; then
+    echo "${patchout}"
+    eerror "Patch failed to revert after dry run."
+    return 1
+  fi
+
+  if [[ "${verbosity}" -ge 3 ]]; then
+    einfo "Patch reverted."
+  fi
+
+  return 0
+}
+
+svnAddDel() {
+  local svnst=$( svn status )
+  local svnadd=$( echo "${svnst}" | egrep '^\?' | egrep -v '^\? +[0-9]+-[^ /]+\.patch' | sed -re 's/^\? +//' )
+  local svnrm=$( echo "${svnst}" | egrep '^!' | sed -re 's/^! +//' )
+
+  # add any new files
+  if [[ -n "${svnadd}" ]]; then
+    if [[ "${verbosity}" -ge 3 ]]; then
+      einfo "Adding files:"
+      echo "${svnadd}" | xargs -d '\n' svn add
+      cmdstatus=$?
+    else
+      echo "${svnadd}" | xargs -d '\n' svn add > /dev/null
+      cmdstatus=$?
+    fi
+    if [[ $cmdstatus -ne 0 ]]; then
+      eerror "Adding files failed"
+      return 1
+    fi
+  fi
+
+  # delete any files that need to go
+  if [[ -n "${svnrm}" ]]; then
+    if [[ "${verbosity}" -ge 3 ]]; then
+      einfo "Removing files:"
+      echo "${svnrm}" | xargs -d '\n' svn rm --force
+      cmdstatus=$?
+    else
+      echo "${svnrm}" | xargs -d '\n' svn rm --force > /dev/null
+      cmdstatus=$?
+    fi
+    if [[ $cmdstatus -ne 0 && -z "${ignore_svn_rm_errors}" ]]; then
+      eerror "Removing files failed"
+      return 1
+    fi
+  fi
+
+  return 0
+}
+
+commitMsgFile() {
+  echo "/tmp/commit-msg.$$"
+}
+
+editCommitMessage() {
+  local tmpfile="$( commitMsgFile )"
+  local orig_msg="$(<"${tmpfile}")"
+  local new_msg=''
+
+  echo
+  einfo "The commit message will open in your editor; save and exit to update it."
+  einfo "To revert to the original commit message, clear the file before saving."
+  echo
+
+  sleep 2
+  echo "${orig_msg}" > "${tmpfile}"
+  sleep 1
+
+  while [[ -z "${new_msg}" ]]; do
+    eval $EDITOR "${tmpfile}"
+    new_msg="$(<"${tmpfile}")"
+    if [[ -z "${new_msg}" && -z "${orig_msg}" ]]; then
+      ewarn "Commit message may not be empty."
+    elif [[ -z "${new_msg}" ]]; then
+      einfo "Commit message emptied; reverting to original."
+      new_msg="${orig_msg}"
+    fi
+  done
+}
+
+getMessageFromPatch() {
+  local patchfile="$1"
+  sed -nre '/^Subject:/,/^---/{/^---/q;p;};' "${patchfile}" | sed -re '1s/^Subject: ([^]]+] +)?//; ${/^$/d};'
+}
+
+getCommitMessage() {
+  local patchfile="$1"
+  local msg="$( getMessageFromPatch "${patchfile}" )"
+  local msgfile="$( commitMsgFile )"
+  echo "${msg}" > "${msgfile}"
+
+  if [[ -z "${msg}" ]]; then
+    einfo "No commit message was found for this patch. Please provide one."
+    editCommitMessage
+  fi
+}
+
+echoCommitMsg() {
+  local commit_msg="$1"
+
+  if [[ "${verbosity}" -ge 2 ]]; then
+    echo "${col_y}Commit message:${col_x}"
+    echo "${commit_msg}" | sed -e 's/^/  /'
+  elif [[ "${verbosity}" -ge 1 ]]; then
+    einfo "Commit message:"
+    echo "${commit_msg}" | sed -e 's/^/     /'
+  else
+    echo "Commit message:"
+    echo "${commit_msg}" | sed -e 's/^/  /'
+  fi
+  echo
+}
+
+applyPatch() {
+  local patchfile="$1"
+
+  doPatch "${patchfile}"
+  local patchstat=$?
+  [[ $patchstat -eq 1 ]] && return 1   # patch failed
+  [[ $patchstat -eq 2 ]] && return 0   # patch already applied
+  svnAddDel              || return 1
+
+  if [[ "${verbosity}" -ge 3 ]]; then
+    einfo "Final pre-commit status:"
+    svn status
+  fi
+
+  getCommitMessage "${patchfile}" || return 1
+  local msgfile="$( commitMsgFile )"
+  local commit_msg="$(<"${msgfile}")"
+
+  local ok=0
+  echoCommitMsg "${commit_msg}"
+
+  if [[ "${interactive}" == "0" || "${verbosity}" -le 1 ]]; then
+    ok=1
+  fi
+  while [[ "${ok}" == 0 ]]; do
+    echo
+    echo -n "${col_w}Commit?${col_x} [Y/e/t/r/s/a/?] "
+    local response=''
+    read response
+    case "${response}" in
+      ''|[yY]*)
+        ok=1
+        ;;
+      [tT]*)
+        svn status
+        ;;
+      [eE]*)
+        editCommitMessage
+        commit_msg="$(<"${msgfile}")"
+        echoCommitMsg "${commit_msg}"
+        ;;
+      [sS]*)
+        echo
+        einfo "Starting shell; exit to return to this menu."
+        einfo "Please do ${col_u}not${col_x} commit to subversion."
+        echo
+        ${SHELL:-/bin/bash}
+        ;;
+      [rR]*)
+        echo
+        einfo "Aborting and reverting current patch"
+        ewarn "Note that some empty directories may remain"
+        echo
+        revertPatch "${patchfile}"
+        svn revert -R .
+        return 1
+        ;;
+      [aA]*)
+        echo
+        einfo "Aborting but ${col_u}not${col_x} reverting current patch"
+        echo
+        return 1
+        ;;
+      '?'|*)
+        echo
+        echo "${col_y}Y${col_x}es, commit/${col_y}E${col_x}dit commit message/show s${col_y}T${col_x}atus/${col_y}R${col_x}evert and abort/${col_y}S${col_x}tart shell/${col_y}A${col_x}bort"
+        ;;
+    esac
+  done
+
+  svn ci -m "${commit_msg}"
+  if [[ "$?" -ne 0 ]]; then
+    eerror "Commit failed."
+    return 1
+  fi
+
+  [[ "${verbosity}" -ge 3 ]] && einfo "Removing patch file"
+  eval "${rm_cmd}"' '"${patchfile}"
+  if [[ "$?" -ne 0 ]]; then
+    eerror "Failed to remove patch ${patchfile}"
+    return 1
+  fi
+  echo
+
+  return 0
+}
+
+doSquash() {
+  local patches="$1"
+  local final_msg_file="/tmp/squash-commit-msg.$$"
+  local curpatch=0
+  local msgfile="$( commitMsgFile )"
+
+  # ensure final commit message is empty
+  echo -n > "${final_msg_file}"
+
+  local ignore_svn_rm_errors=1
+
+  for patchfile in ${patches}; do
+    curpatch=$(( $curpatch + 1 ))
+    if [[ ! -r "${patchfile}" ]]; then
+      eerror "Patch ${patchfile} not found."
+      return 1
+    fi
+
+    doPatch "${patchfile}"
+    local patchstat=$?
+    [[ $patchstat -eq 1 ]] && return 1   # patch failed
+    [[ $patchstat -eq 2 ]] && continue   # patch already applied
+    svnAddDel              || return 1
+
+    getCommitMessage "${patchfile}" || return 1
+
+    [[ -s "${final_msg_file}" ]] && echo -e "\n##############################################################################\n" >> "${final_msg_file}"
+    cat "${msgfile}" >> "${final_msg_file}"
+  done
+
+  mv "${final_msg_file}" "${msgfile}"
+  editCommitMessage
+  local commit_msg="$(<"${msgfile}")"
+  echoCommitMsg "${commit_msg}"
+
+  local ok=0
+  while [[ "${ok}" == 0 ]]; do
+    echo
+    echo -n "${col_w}Commit?${col_x} [Y/e/t/r/s/a/?] "
+    local response=''
+    read response
+    case "${response}" in
+      ''|[yY]*)
+        ok=1
+        ;;
+      [tT]*)
+        svn status
+        ;;
+      [eE]*)
+        editCommitMessage
+        commit_msg="$(<"${msgfile}")"
+        echoCommitMsg "${commit_msg}"
+        ;;
+      [sS]*)
+        echo
+        einfo "Starting shell; exit to return to this menu."
+        einfo "Please do ${col_u}not${col_x} commit to subversion."
+        echo
+        ${SHELL:-/bin/bash}
+        ;;
+      [rR]*)
+        echo
+        einfo "Aborting and reverting patches"
+        ewarn "Note that some empty directories may remain"
+        echo
+        patches=$( echo "${patches}" | tac )
+        for patchfile in ${patches}; do
+          einfo "Reverting ${patchfile}"
+          revertPatch "${patchfile}"
+          if [[ "$?" -ne 0 ]]; then
+            eerror "Failed to revert patch."
+            return 1
+          fi
+        done
+        svn revert -R .
+        return 1
+        ;;
+      [aA]*)
+        echo
+        einfo "Aborting but ${col_u}not${col_x} reverting patches"
+        echo
+        return 1
+        ;;
+      '?'|*)
+        echo
+        echo "${col_y}Y${col_x}es, commit/${col_y}E${col_x}dit commit message/show s${col_y}T${col_x}atus/${col_y}R${col_x}evert and abort/${col_y}S${col_x}tart shell/${col_y}A${col_x}bort"
+        ;;
+    esac
+  done
+
+  svn ci -m "${commit_msg}"
+  if [[ "$?" -ne 0 ]]; then
+    eerror "Commit failed."
+    return 1
+  fi
+
+  for patchfile in ${patches}; do
+    [[ "${verbosity}" -ge 3 ]] && einfo "Removing patch ${patchfile}"
+    eval "${rm_cmd}"' '"${patchfile}"
+    if [[ "$?" -ne 0 ]]; then
+      eerror "Failed to remove ${patchfile}."
+      return 1
+    fi
+  done
+  echo
+
+  return 0
+}
+
+doIndividualCommits() {
+  local patches="$1"
+  local curpatch=0
+
+  for patchfile in ${patches}; do
+    curpatch=$(( $curpatch + 1 ))
+    if [[ ! -r "${patchfile}" ]]; then
+      eerror "Patch ${patchfile} not found."
+      return 1
+    fi
+    applyPatch "${patchfile}" || return 1
+  done
+}
+
+##############################################################################
+# Main program
+################
+
+# check for subversion repository
+if [[ ! -d "$( pwd )/.svn" ]]; then
+  eerror "This does not appear to be a subversion repository."
+  exit 1
+fi
+
+# Parse arguments
+
+while getopts ':dfhklCqstv:' opt; do
+  case "$opt" in
+    d)
+      # Delete patch after applying it without confirmation
+      force_delete_patch=1
+      ;;
+    f)
+      # Non-interactive
+      interactive=0
+      ;;
+    k)
+      # Silently skip already-applied patches
+      skip_applied=1
+      ;;
+    C)
+      # No colour
+      colour=0
+      ;;
+    s)
+      # Squash into a single commit
+      squash=1
+      ;;
+    l)
+      # Verbosity: list patches as they are applied
+      verbosity=1
+      ;;
+    t)
+      # Verbosity: do not display subversion status
+      verbosity=2
+      ;;
+    q)
+      # Verbosity: complete silence
+      verbosity=0
+      ;;
+    v)
+      # set verbosity level
+      verbosity=$OPTARG
+      ;;
+    h)
+      # Help
+      usage
+      fullhelp
+      echo
+      exit 1
+      ;;
+    \?)
+      echo "Invalid option: -$OPTARG" >&2
+      usage
+      echo "Use -h for help."
+      exit 1
+      ;;
+    :)
+      echo "Option -$OPTARG requires an argument" >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [[ "${colour}" == "1" ]]; then
+  col_x="[0m"
+  col_u="[1;4;31m"
+  col_y="[1;33m"
+  col_w="[1;37m"
+fi
+
+shift $(( ${OPTIND} - 1 ))
+
+if [[ "$#" -eq 0 ]]; then
+  patches="$( find . -maxdepth 1 -name '[0-9]*.patch' -type f -printf %f\\n | sort -n -t- -k1 )"
+else
+  patches="$( for i in "$@"; do echo "$i"; done )"
+fi
+if [[ -z "${patches}" || "${patches}" == '[0-9]*.patch' ]]; then
+  if [[ "$#" -eq 0 ]]; then
+    eerror "No patches found. They should be located in the current directory and"
+    eerror "produced by git-format-patch (i.e. named 0000-commit-title.patch)."
+  else
+    eerror "No patches found."
+  fi
+  exit 1
+fi
+
+# TODO: check working copy is clean (apart from patch files)
+
+if [[ "${force_delete_patch}" == "1" ]]; then
+  rm_cmd="$(which rm) -f --"
+else
+  rm_cmd="$(which rm) -i --"
+fi
+
+patchcount=$( echo "${patches}" | wc -l )
+einfo "${patchcount} patches to apply"
+echo
+if [[ $squash -eq 1 ]]; then
+  doSquash "${patches}" || exit 1
+else
+  doIndividualCommits "${patches}" || exit 1
+fi

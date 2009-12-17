@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# increase this number as necessary
+max_pages=9
+
+echo -e ' \e[1;32m*\e[m Fetching list of available videos to talk-url-list...' >&2
+for i in $( seq 1 $max_pages ); do
+  echo -e "   \e[1;32m*\e[m Page $i of $max_pages" >&2
+  curl -s "http://www.ted.com/index.php/talks/atoz/page/$i"
+done | egrep 'a href="/talks/[^/]+"' | sed -re 's#^.*href="([^"]+)\.html".*#\1#' > talk-url-list
+
+echo -e ' \e[1;32m*\e[m Creating set of wget commands in wget-cmds...' >&2
+touch wget-cmds
+chmod +x wget-cmds
+
+url_count=$( wc -l talk-url-list | cut -d' ' -f1 )
+cur_url=1
+for i in $(<talk-url-list); do
+  echo -e "   \e[1;32m*\e[m URL $cur_url of $url_count" >&2
+  n=$(basename "$i")
+  v=$(curl -s "http://www.ted.com$i.html" | grep 'Zipped MP4' | sed -re 's#^.*href="(/talks/download/video/[^"]+)".*$#\1#')
+  echo wget -c "http://www.ted.com$v" -O "$n.zip"
+  echo sleep 5
+  cur_url=$(( $cur_url + 1 ))
+done > wget-cmds
+
+echo -e ' \e[1;32m*\e[m Running wget-cmds...' >&2
+sh ./wget-cmds

@@ -1,0 +1,48 @@
+#!/bin/bash
+
+master_mute=`amixer | grep -A1 -iE '(Master|Output Jack)' | grep -B1 pswitch | sed -nre "s/.*'(.*)'.*/\1/; 1p"`
+[[ -z "$master_mute" ]] && echo "Failed to find master (mute) control" && exit 1
+
+master_vol=`amixer | grep -A1 -iE '(Master|Output Jack)' | grep -B1 pvolume | sed -nre "s/.*'(.*)'.*/\1/; 1p"`
+[[ -z "$master_vol" ]] && echo "Failed to find master (volume) control" && exit 1
+
+case $1 in
+  toggle)
+    echo 'Toggling...'
+    amixer sset "$master_mute" toggle >/dev/null
+    ;;
+  [0-9]*)
+    echo "Setting volume $1..."
+    amixer sset "$master_vol" "$@" >/dev/null
+    ;;
+esac
+
+pgrep -d, osd_cat >/dev/null && killall osd_cat
+
+VOLUME=`amixer sget "$master_vol" | grep '%' | grep Playback | sed -re 's/^.*\[([0-9]+).\].*$/\1/'`
+TITLE="Volume [${VOLUME}%]"
+COLOUR="green"
+
+MUTED=`amixer sget "$master_mute"`
+MASTER=`amixer sget "$master_vol"`
+
+echo "$MUTED" | egrep -q "\[off\]"
+MASTER_MUTE=$?
+if [ $MASTER_MUTE -eq 0 ]; then
+  TITLE="Volume [Muted]"
+  COLOUR="red"
+fi
+
+echo "$TITLE"
+
+OPTS="
+--pos=bottom 
+--align=center
+--offset=50
+--indent=0
+--colour=$COLOUR
+--delay=3
+--barmode=percentage
+"
+
+osd_cat $OPTS --percentage="$VOLUME" --text="$TITLE"

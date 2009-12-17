@@ -1,0 +1,3 @@
+#!/bin/bash
+killall osd_cat 2>/dev/null
+echo "$@" | osd_cat --delay=3 --pos=bottom --align=center --offset=-5 --indent=0 --colour=green --font='-bitstream-bitstream vera sans-bold-r-*-*-*-*-*-*-*-*-*-*'

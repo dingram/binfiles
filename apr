@@ -1,0 +1,247 @@
+#!/bin/csh -f
+#
+# apr: lab printer version of lpr.
+#
+# usage: apr [-P<printer>] [-wait | -nowait] [-qmax <n>] [-sleep <seconds>]
+#            [-title "<title>"]
+#            [-fold | -foldatspaces | -nofold] [-shrink | -noshrink]
+#            [-wide | -narrow] <file>0+
+#
+#  -wait calls apwait before each printing event
+#  (passing any -qmax <n> and -sleep <seconds> parameters on), -nowait doesn't.
+#  (-wait currently default.)
+#
+#  -title allows a title to be given (each file will be given that title!).
+#   (The default title for each file is its filename.)
+#
+#  -fold folds long lines to standard width of 80 (or 160 with -wide),
+#  -foldatspaces is the same but tries to fold at spaces between "words",
+#  -nofold doesn't fold. (-fold currently default.)
+#
+#  -shrink puts the output sideways and shrunk, giving 2 pages
+#   (or 1 wide page with -wide) per printed page, -noshrink doesn't.
+#   (-shrink currently default.)
+#
+#  -wide gives 1 wide, shrunk, sideways page per printed page, -narrow
+#   gives narrow pages layout-controlled by -shrink or -noshrink above.
+#  -wide forces -shrink, even if -noshrink was specified.
+#   (-narrow currently default.)
+#
+#  If no files are given the standard input will be used.
+#  Default printer is bronze-2, or $PRINTER if it exists.
+#
+set progname       = `basename $0`
+
+set printer_arg    = "-PHPDeskJet5150"	#default
+unset wait				#default
+set qmax_arg       = ""			#default
+set sleep_time_arg = ""			#default
+set title          = ""			#default
+					# (indicates filename is to be used)
+set foldcontrol    = "-fold"		#default
+set shrink				#default
+set widthcontrol   = "-narrow"		#default
+
+
+#
+#	check for environment variable $PRINTER
+#
+if ($?PRINTER) then
+  set printer_arg = "-P$PRINTER"
+endif
+
+
+#
+#	argument checking
+#
+set over = "n"
+
+while ($#argv && ($over == "n"))
+  switch ("$1")
+    case "-P*":
+      set printer_arg = "$1" ; shift
+      breaksw
+    case "-noprint":
+      set noprint ; shift
+      breaksw
+    case "-wait":
+      set wait ; shift
+      breaksw
+    case "-nowait":
+      unset wait ; shift
+      breaksw
+    case "-qmax":
+      if ($#argv < 2) then
+        (\
+          echo "usage: $progname [-P<printer>] [-wait | -nowait] [-qmax <n>] [-sleep <seconds>]" ;\
+          echo '                 [-title "<title>"]' ;\
+          echo "                 [-fold | -foldatspaces | -nofold] [-shrink | -noshrink]" ;\
+          echo "                 [-wide | -narrow] <file>0+" ;\
+        ) | errcat
+        exit 1
+      endif
+
+      set qmax_arg = "-qmax $2" ; shift ; shift
+      if (`echo "$qmax_arg" | grep -c '^-qmax [0-9][0-9]*$'` != 1) then
+        (\
+          echo "usage: $progname [-P<printer>] [-wait | -nowait] [-qmax <n>] [-sleep <seconds>]" ;\
+          echo '                 [-title "<title>"]' ;\
+          echo "                 [-fold | -foldatspaces | -nofold] [-shrink | -noshrink]" ;\
+          echo "                 [-wide | -narrow] <file>0+" ;\
+        ) | errcat
+        exit 1
+      endif
+
+      breaksw
+    case "-sleep":
+      if ($#argv < 2) then
+        (\
+          echo "usage: $progname [-P<printer>] [-wait | -nowait] [-qmax <n>] [-sleep <seconds>]" ;\
+          echo '                 [-title "<title>"]' ;\
+          echo "                 [-fold | -foldatspaces | -nofold] [-shrink | -noshrink]" ;\
+          echo "                 [-wide | -narrow] <file>0+" ;\
+        ) | errcat
+        exit 1
+      endif
+
+      set sleep_time_arg = "-sleep $2" ; shift ; shift
+      if (`echo "$sleep_time_arg" | grep -c '^-sleep [0-9][0-9]*$'` != 1) then
+        (\
+          echo "usage: $progname [-P<printer>] [-wait | -nowait] [-qmax <n>] [-sleep <seconds>]" ;\
+          echo '                 [-title "<title>"]' ;\
+          echo "                 [-fold | -foldatspaces | -nofold] [-shrink | -noshrink]" ;\
+          echo "                 [-wide | -narrow] <file>0+" ;\
+        ) | errcat
+        exit 1
+      endif
+
+      breaksw
+    case "-title":
+      if ($#argv < 2) then
+        (\
+          echo "usage: $progname [-P<printer>] [-wait | -nowait] [-qmax <n>] [-sleep <seconds>]" ;\
+          echo '                 [-title "<title>"]' ;\
+          echo "                 [-fold | -foldatspaces | -nofold] [-shrink | -noshrink]" ;\
+          echo "                 [-wide | -narrow] <file>0+" ;\
+        ) | errcat
+        exit 1
+      endif
+
+      set title = "$2" ; shift ; shift
+      breaksw
+    case "-fold":
+      set foldcontrol = "-fold" ; shift
+      breaksw
+    case "-foldatspaces":
+      set foldcontrol = "-foldatspaces" ; shift
+      breaksw
+    case "-nofold":
+      set foldcontrol = "-nofold" ; shift
+      breaksw
+    case "-shrink":
+      set shrink ; shift
+      breaksw
+    case "-noshrink":
+      unset shrink ; shift
+      breaksw
+    case "-wide":
+      set widthcontrol = "-wide" ; shift
+      breaksw
+    case "-narrow":
+      set widthcontrol = "-narrow" ; shift
+      breaksw
+    case "-*":
+      (\
+        echo "usage: $progname [-P<printer>] [-wait | -nowait] [-qmax <n>] [-sleep <seconds>]" ;\
+        echo '                 [-title "<title>"]' ;\
+        echo "                 [-fold | -foldatspaces | -nofold] [-shrink | -noshrink]" ;\
+        echo "                 [-wide | -narrow] <file>0+" ;\
+      ) |errcat
+      exit 1
+      breaksw
+    default:
+      set over = "y"
+      breaksw
+  endsw
+end #while
+
+
+if ("$widthcontrol" == "-wide") then
+  if ! $?shrink then
+    echo "(${progname}: warning: -wide requires -shrink, setting -shrink)" | errcat
+  endif
+
+  set shrink
+  set fold_width = 160
+else
+  set fold_width = 80
+endif
+
+
+if ("$foldcontrol" == "-fold") then
+  set foldcommand = "fold --width=$fold_width"
+  set cut_options = ""
+else if ("$foldcontrol" == "-foldatspaces") then
+  set foldcommand = "fold --spaces --width=$fold_width"
+  set cut_options = ""
+else #fold not wanted, so cut (truncate) lines explicitly
+  set foldcommand = "cat"
+  set cut_options = "-c"
+endif
+
+
+if $?shrink then
+  if ("$widthcontrol" == "-wide") then
+    set enscript_options = "-p- -g -G $cut_options -1r -fCourier7 -L60"
+  else
+    set enscript_options = "-p- -g -G $cut_options -2r -L60"
+  endif
+else
+  set enscript_options = "-p- -g -G $cut_options -L60"
+endif
+
+
+if ! $#argv then #standard input
+  if ("$title" != "") then
+    set stdin_title = "$title"
+  else
+    set stdin_title = "(standard input)"
+  endif
+
+  if $?noprint then
+    $foldcommand | enscript $enscript_options -b"$stdin_title" > stdin.ps
+  else
+    if $?wait then
+      $foldcommand | enscript $enscript_options -b"$stdin_title" | (apwait $printer_arg $qmax_arg $sleep_time_arg ; lpr $printer_arg)
+    else
+      $foldcommand | enscript $enscript_options -b"$stdin_title" | lpr $printer_arg
+    endif
+  endif
+else #files given
+  foreach file ($*)
+    if -f $file then
+      echo -n "${file}: "
+
+      if ("$title" != "") then
+        set file_title = "$title"
+      else
+        set file_title = "$file"
+      endif
+
+      if $?noprint then
+        $foldcommand < $file | enscript $enscript_options -b"$file_title" > "${file}.ps"
+      else
+        if $?wait then
+          $foldcommand < $file | enscript $enscript_options -b"$file_title" | (apwait $printer_arg $qmax_arg $sleep_time_arg ; lpr $printer_arg)
+        else
+          $foldcommand < $file | enscript $enscript_options -b"$file_title" | lpr $printer_arg
+        endif
+      endif
+
+      echo "done."
+    else
+      errecho "${file} not found"
+      # but don't exit!
+    endif
+  end #foreach file
+endif #of whether standard input or files

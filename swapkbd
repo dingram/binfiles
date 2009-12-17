@@ -1,0 +1,13 @@
+#!/bin/bash
+
+xkbrules=$( xprop -root _XKB_RULES_NAMES      )
+kbmodel=$(  echo "${xkbrules}" | cut -d\" -f4 )
+kblayout=$( echo "${xkbrules}" | cut -d\" -f6 )
+
+if [[ "${kblayout}" != 'dvorak' ]]; then
+  setxkbmap -layout dvorak -variant gb -model "${kbmodel}"
+  osd_echo "DVORAK"
+else
+  setxkbmap -layout gb -model "${kbmodel}"
+  osd_echo "QWERTY"
+fi

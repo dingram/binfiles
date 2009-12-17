@@ -1,0 +1,25 @@
+#!/bin/bash
+while (( "$#" )); do
+
+  t=`file -bi "$1" | cut -d\; -f1`
+  case $t in
+    *gzip)
+    tar xzf "$1"
+    ;;
+    *bzip2)
+    tar xjf "$1"
+    ;;
+    *rar)
+    unrar x -ad -kb "$1"
+    ;;
+    *zip)
+    dir="${1//%.zip}"
+    [[ -e "$dir" ]] && dir=${1%.?*}
+    [[ -z "$dir" ]] && dir="${1//%.zip}-extracted"
+    unzip "$1" -d "$dir"
+    ;;
+  esac
+
+  shift
+
+done
