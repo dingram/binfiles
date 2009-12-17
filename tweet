@@ -1,0 +1,3 @@
+#!/bin/bash
+echo "Tweeting: $*"
+curl --basic -n -d status="$*" http://twitter.com/statuses/update.xml

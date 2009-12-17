@@ -1,0 +1,22 @@
+#!/bin/bash
+
+TYPE="$1"
+CHANNEL="$2"
+PROGRAMME="$3"
+
+case "${TYPE}" in
+  radio)
+    verbed="listened to"
+    ;;
+  *)
+    verbed="watched"
+    ;;
+esac
+
+if [[ -n "${CHANNEL}" ]]; then
+  TWEET="Just ${verbed} ${PROGRAMME} on ${CHANNEL}"
+else
+  TWEET="Just ${verbed} ${PROGRAMME}"
+fi
+
+tweet "${TWEET}"

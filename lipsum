@@ -1,0 +1,73 @@
+#!/usr/bin/perl -w
+use LWP::UserAgent;
+use HTTP::Request::Common;
+use HTML::Entities;
+use Getopt::Long;
+
+# Generate lipsum (courtesy of lipsum.com)
+# probably needs neatening up here and there
+# comments? who needs comments? perl is easy to understand...
+
+$v_out=0;  # 0=html  1=plaintext
+
+GetOptions(
+    "paras=i"  => \$o_paras,
+    "words=i"  => \$o_words,
+    "bytes=i"  => \$o_bytes,
+    "lists=i"  => \$o_lists,
+    "html!"    => \$v_out  ,
+    "help"     => \$o_help ,
+);
+
+sub usage() {
+    select(STDERR);
+    print "Usage:\n   $0 [OPTIONS]... amount\n\n";
+    print "    -p,--paras     Return paragraphs (default)\n";
+    print "    -w,--words     Return words\n";
+    print "    -b,--bytes     Return bytes\n";
+    print "    -l,--lists     Return lists\n";
+    print "    -h,--html      Return HTML (default)\n";
+    print "    -n,--nohtml    Return plain text\n";
+    print "\n";
+
+    exit 1;
+}
+
+&usage() if $o_help;
+
+if ($o_paras) {
+  $what="paras";
+  $amt=$o_paras;
+} elsif ($o_words) {
+  $what="words";
+  $amt=$o_words;
+} elsif ($o_bytes) {
+  $what="bytes";
+  $amt=$o_bytes;
+} elsif ($o_lists) {
+  $what="lists";
+  $amt=$o_lists;
+} else {
+  &usage();
+}
+
+$ua = LWP::UserAgent->new;
+$res = $ua->request(POST "http://www.lipsum.com/feed/html",
+		[ what => $what,
+		  start => "yes",
+		  amount => $amt] );
+$rply = $res->content;
+decode_entities($rply);
+
+$rply =~ s/.*<div[^>]*id="lipsum"[^>]*>(.*?)<\/div>.*/$1/imsg;
+$rply =~ s/\n(.*)/$1/imsg;
+if ($v_out==0) {
+  $rply =~ s/<p>\n/<p>/imsg;
+  $rply =~ s/\n<\/p>/<\/p>/imsg;
+} else {
+  $rply =~ s/<li>/ - /imsg;
+  $rply =~ s/<[^>]+?>//imsg;
+  $rply =~ s/\n\n/\n/imsg;
+  $rply =~ s/\n\n/\n/imsg;
+}
+print $rply;

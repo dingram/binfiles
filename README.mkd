@@ -54,9 +54,17 @@ A very hacky method of fetching all of the videos from [TED.com](http://www.ted.
 
 Geek Code decoder.
 
+## id3status ##
+
+Display which version(s) of ID3 tags a file has.
+
 ## iptables_parse.pl ##
 
 Partial parser for `iptables-save` output to make it more understandable.
+
+## lipsum ##
+
+Fetch lipsum from an online generator.
 
 ## netstatus ##
 
@@ -80,6 +88,15 @@ known issues, but is usable for most common changes.
 ## swapkbd ##
 
 Used for swapping keyboard between GB and DVORAK.
+
+## tweet ##
+
+Update twitter status; login information in `~/.netrc`.
+
+## tweet-get_iplayer ##
+
+Requires `tweet`. Updates status from `get_iplayer`. `get_iplayer` option usage:
+    command ~/bin/tweet-get_iplayer "<type>" "<channel>" "<name> - <episode>"
 
 ## uniq.pl ##
 
