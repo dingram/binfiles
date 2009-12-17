@@ -1,0 +1,29 @@
+#!/usr/bin/perl -w
+
+while (<>) {
+  chomp;
+  if (/^....................... \(current user\) - /) {
+    # current user, ignore for now
+  } elsif (/^\s*$/) {
+    # blank line, ignore
+  } else {
+    $datestamp=$_;
+    $datestamp=~s/^.(..).(..).(....)...(........)...*/$3-$2-$1 $4/;
+    $email=$_;
+    $email=~s/.*\((.*?)\) - Contact.*/$1/;
+
+    if (/ - Contact is now online/) {
+      $state=1;
+    } elsif (/ - Contact is now offline/) {
+      $state=0;
+    } elsif (/ - Contact appears to be idle/) {
+      $state=2;
+    } elsif (/ - Contact status has been changed to: (.*)/) {
+      $state=3;
+    } else {
+      # I don't know what to do with it... silently ignore
+      $state=-1;
+    }
+    print "INSERT INTO test_data (email, eventtime, eventtype) VALUES ('$email', '$datestamp', $state);\n" unless ($state==-1);
+  }
+}

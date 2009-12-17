@@ -1,0 +1,135 @@
+#!/usr/bin/perl -w
+#
+# TODO: write a script to start at one file, then wget all links from it
+#       and build appropriate directory structure. Then go through each of
+#       those files and wget unless file exists... wget file unless (-e file)
+#
+# NOTE: may not need to do the above... see:
+# for i in `ls -1 --color=never 2005/ | grep -v .html | grep -v .gif`; do cat 2005/$i/*.html | extract_links -iAC -f \\.\\. -f rumour -f report -f july -f anasazi http://cropcircleconnector.com/2005/$i/ | wget -nc -x -nH -i -; done
+
+# initialisation
+@allmatches=();
+$base="";
+$v_abs = $v_sec = $v_rel = $v_col = 1;
+$v_img=0;
+@v_filter=();
+
+sub filter {
+  local $a = shift;
+  
+  foreach $filter (@v_filter) {
+    return 0 if ($a =~ /$filter/);
+  }
+  return 1;
+}
+
+sub evalarg() {
+  local $arg=shift;
+
+  if ( ($arg eq "-a") || ($arg eq "--absolute") ) {
+    $v_abs=1;
+  } elsif ( ($arg eq "-A") || ($arg eq "--no-absolute") ) {
+    $v_abs=0;
+  } elsif ( ($arg eq "-c") || ($arg eq "--color") ) {
+    $v_col=1;
+  } elsif ( ($arg eq "-C") || ($arg eq "--no-color") ) {
+    $v_col=0;
+  } elsif ( ($arg eq "-r") || ($arg eq "--relative") ) {
+    $v_rel=1;
+  } elsif ( ($arg eq "-R") || ($arg eq "--no-relative") ) {
+    $v_rel=0;
+  } elsif ( ($arg eq "-s") || ($arg eq "--secure") ) {
+    $v_sec=1;
+  } elsif ( ($arg eq "-I") || ($arg eq "--no-images") ) {
+    $v_img=0;
+  } elsif ( ($arg eq "-i") || ($arg eq "--images") ) {
+    $v_img=1;
+  } elsif ( ($arg eq "-f") || ($arg eq "--filter") ) {
+    $v_filter[@v_filter]=shift @ARGV;
+  } elsif ( ($arg eq "-h") || ($arg eq "--help") ) {
+    select(STDERR);
+    print "Usage:\n   $0 [OPTIONS]... mainURL < HTML\n\n";
+    print " -a, --absolute    Includes absolute links (default)\n";
+    print " -c, --color       Show colours (default)\n";
+    print " -r, --relative    Includes relative links (default)\n";
+    print " -s, --secure      Includes secure (https://) links (default)\n";
+    print " -i, --images      Include image sources\n";
+    print "\n     NOTE: Capitalised versions of the above options (or adding \"no-\"\n     in the full option) will have the reverse effect.\n\n";
+    print " -f pattern        Filters out URLs matching the given pattern. Pattern is a\n--filter pattern   Perl regular expression.\n";
+    print "\n";
+    
+    exit 1;
+  } else  {
+    print STDERR "Invalid argument $arg\n";
+    exit 1;
+  }
+ }
+
+# scan commandline
+while ($#ARGV>=0) {
+  $arg=shift;
+  
+  if (defined $arg) {
+    if ($arg =~ /^--/) {
+      # parse arguments
+      &evalarg($arg);
+      
+    } elsif ($arg =~ /^-/) {
+      # parse arguments
+      $arg =~ s/-//g;
+
+      if (length($arg)>1) {
+        for ($i=0; $i<length($arg); $i++) {
+	  my $v = substr($arg, $i, 1);
+	  &evalarg("-$v");
+	}
+      } else {
+        &evalarg("-$arg");
+      }
+      
+    } else {
+      # set filename
+      $filename=$arg;
+    }
+  }
+}
+
+if (defined $filename) {
+  $base = $filename;
+  $base =~ s|/[^/]+$|/|;
+}
+
+while (<STDIN>) {
+  next unless (/<a/ || ($v_img && /<img/));
+  @matches = /.*<a[^>]+href="?([^"#][^"]+)(?:#[^"]+)?"?[^>]*>/gi;
+  push @allmatches, @matches;
+  if ($v_img) {
+    @matches = /.*<img[^>]+src="?([^"#][^"]+)"?[^>]*>/gi;
+    push @allmatches, @matches;
+  }
+}
+
+foreach $a (@allmatches) {
+  next unless ($a=~/#/);
+  $a=~s/#.+$//;
+}
+
+%seen=();
+@uniq = grep { ! $seen{$_} ++ } @allmatches;
+
+foreach $a (@uniq) { 
+  if ($a=~ m|^mailto:|) {
+    # mail link - ignore
+  } elsif ($a=~ m|^http://|) {
+    next if (! ($v_abs && &filter($a)));
+    print " " . chr(27) . "[33m*" . chr(27) . "[0m " if ($v_col);
+    print "$a\n";
+  } elsif ($a=~ m|^https://|) {
+    next if (! ($v_sec && &filter($a)));
+    print " " . chr(27) . "[31m*" . chr(27) . "[0m " if ($v_col);
+    print "$a\n";
+  } elsif ($v_rel && filter($a)) {
+    print " " . chr(27) . "[32m*" . chr(27) . "[0m " if ($v_col);
+    print "${base}$a\n";
+  }
+}

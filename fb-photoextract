@@ -1,0 +1,117 @@
+#!/usr/bin/perl -w
+
+use strict;
+use HTTP::Cookies;
+use LWP;
+
+my $username='david.ingram@imperial.ac.uk';
+my $password='comein';
+my $fbdomain='imperial';
+
+my $cookie_jar = HTTP::Cookies->new(
+  file => "$ENV{'HOME'}/.lwp-cookies-facebook",
+  autosave => 1,
+  ignore_discard => 1
+);
+
+my $browser = LWP::UserAgent->new(
+  agent => "Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.8.1) Gecko/20060601 Firefox/2.0"
+);
+$browser->cookie_jar($cookie_jar);
+$browser->max_redirect(0);
+
+$|=1;
+
+my $startno=0;
+my $photono=0;
+my $photototal=0;
+my $starturl=shift;
+my $cururl=$starturl;
+my $person="Unknown person";
+
+exit if ($starturl =~ /^#/);
+
+my $RSTR = "\033[1;31m *\033[m";
+my $GSTR = "\033[1;32m *\033[m";
+my $YSTR = "\033[1;33m *\033[m";
+my $BSTR = "\033[1;34m *\033[m";
+my $MSTR = "\033[1;35m *\033[m";
+my $CSTR = "\033[1;36m *\033[m";
+
+outer:
+while (1) {
+  print STDERR "${GSTR} Fetching $cururl\n";
+  # fetch url $cururl
+  my $req = HTTP::Request->new(GET => $cururl);
+  my $res = $browser->request($req);
+  my @l = split /[\r\n]+/, $res->as_string;
+  if ($res->is_redirect) {
+    print STDERR "${CSTR} Redirect received: ".$res->header("Location")."\n";
+    if ($res->header("Location") =~ /login\.php/
+      #|| $res->header("Location") =~ /www\.facebook\.com/
+       ) {
+      performLogin();
+    } else {
+      $cururl=$res->header("Location");
+    }
+    next;
+  }
+
+  #print STDERR "Parsing...\n";
+  # parse return content
+  foreach (@l) {
+    if (m#<h2>Photos of (.+?)(?: In .+)?(?: (?:Tagged|Added) by .+)?</h2>#) {
+      $person=$1;
+    }
+    if (/<span id="photo_count">Photo (\d+) of (\d+)/) {
+      if ($photono==0) {
+        $startno=$1;
+        if ($startno!=1) {
+          print STDERR "${YSTR} Hmmm - starting partway through the list ($1 of $2). This isn't a problem, but just wanted to let you know I noticed.\n";
+        }
+      }
+      if ($photono>=$1 && $1!=1) { print STDERR "${RSTR} End of list - photo number decreased (probably an error?)\n"; last outer; }
+      if ($startno==$1 && $photono!=0) { print STDERR "${CSTR} End of list - reached $startno again\n"; last outer; }
+      if ($photototal!=0 && $photototal!=$2) { print STDERR "${RSTR} Photo total changed?\n"; last outer; }
+      $photono=$1;
+      $photototal=$2;
+    }
+    if (/^.*<a[^>]+href="([^"]+)"[^>]*"myphotolink"><img[^>]+src="([^"]+)"[^>]*>.*$/) {
+      print "\"$person\",$photono,$photototal,$cururl,$1,$2\n";
+      $cururl="http://${fbdomain}.facebook.com/$1";
+      last;
+    }
+  }
+
+  my $sleeptime = rand(54) + 7;
+  print STDERR "${CSTR} Sleeping for $sleeptime seconds...\n";
+  sleep $sleeptime;
+}
+
+print STDERR "${GSTR} Done\n";
+
+sub performLogin {
+  print STDERR "${GSTR} Logging in...";
+  my $url="http://${fbdomain}.facebook.com/login.php";
+  my $req = HTTP::Request->new(GET => $url);
+  $req->content_type('application/x-www-form-urlencoded');
+  $req->content('match=www&errors=0');
+
+  my $res = $browser->request($req);
+  my $challenge = $res->as_string;
+  #$challenge=~s#^.*<input type="hidden" id="challenge" name="challenge" value="([^"]+)" />.*$#$1#s;
+  #print STDERR "${CSTR}    Challenge: \"$challenge\"\n";
+
+  my $sleeptime = rand(21) + 5;
+  print STDERR "${CSTR}    Sleeping for $sleeptime seconds...\n";
+  sleep $sleeptime;
+
+  $url="https://login.facebook.com/login.php";
+  $req = HTTP::Request->new(POST => $url);
+  $req->content_type('application/x-www-form-urlencoded');
+  #$req->content('challenge='.$challenge.'&md5pass=&next=http://'.$fbdomain.'.facebook.com/home.php&email='.$username.'&pass='.$password.'&login=');
+  $req->content('next=http://'.$fbdomain.'.facebook.com/home.php&email='.$username.'&pass='.$password.'&login=Login');
+
+  $res = $browser->request($req);
+  print STDERR "${GSTR}    done.\n";
+}

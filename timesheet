@@ -1,0 +1,200 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use Getopt::Long;
+use Pod::Usage;
+use constant {
+    TIMESHEET_PATH => $ENV{'HOME'}.'/.timesheet/tsdata'
+};
+
+my ($o_add, $o_for, $o_datefrom, $o_dateto, $o_help);
+
+GetOptions(
+    "add"           => \$o_add,
+    "for=s"         => \$o_for,
+    "df|datefrom=s" => \$o_datefrom,
+    "dt|dateto=s"   => \$o_dateto,
+    "help"          => \$o_help,
+) || pod2usage(2);
+
+pod2usage(1) if ($o_help);
+
+if ($o_add) {
+    ###################### Add details to timesheet ######################
+    
+} else {
+    ###################### Display timesheet #############################
+    open (TIMESHEET, TIMESHEET_PATH)
+        || die ("Failed to open timesheet: $!\n");
+    my @tslines=<TIMESHEET>;
+    close (TIMESHEET);
+    chomp @tslines;
+    print "-".("=-"x25)."\n\n";
+
+    my ($rate, $date, $for, $subtotalhrs, $totalhrs, $subtotalamt, $totalamt)
+      =(0.0  , undef, undef, 0.0        , 0.0      , -1.0        , 0.0      );
+
+    foreach (@tslines) {
+        my ($type, $data)=split / /, $_, 2;
+        if ($type eq "S") {
+            print "For $data services rendered:\n" if (&canPrint($for, $date));
+
+        } elsif ($type eq "R") {
+            $rate=$data;
+
+        } elsif ($type eq "F") {
+            $for=$data;
+
+        } elsif ($type eq "D") {
+            $date=$data;
+            if (&canPrint($for, $date)) {
+                print "\n" if ($subtotalamt==0);
+                $subtotalamt=0 if ($subtotalamt<0);
+                print "   $date";
+                print " ($for)" if $for;
+                print "\n";
+            }
+            
+        } elsif ($type eq "H") {
+            if (&canPrint($for, $date)) {
+                my $hrs=$data;
+                my $totaltoday=$hrs*$rate;
+                $totalhrs+=$hrs;
+                $subtotalhrs+=$hrs;
+                $totalamt+=$totaltoday;
+                $subtotalamt+=$totaltoday;
+                
+                printf("     %4.1f hrs at £%5.2f/hr = £%8.2f\n",
+                       $hrs, $rate, $totaltoday);
+            }
+            
+        } elsif ($type eq "W") {
+            if (&canPrint($for, $date)) {
+                print "  -------------------------------------\n";
+                printf("   Sub-total:  %5.1f hours = £%8.2f\n",
+                       $subtotalhrs, $subtotalamt);
+            }
+            $subtotalhrs=0;
+            $subtotalamt=0;
+            print "\n" if (&canPrint($for, $date));
+
+        } # silently ignore syntax errors
+    }
+    print "  =====================================\n";
+    printf("   Total:     %6.1f hours = £%8.2f\n\n", $totalhrs, $totalamt);
+    print "-".("=-"x25)."\n";
+}
+
+# Returns true if we're allowed to print given the current $for and $date
+sub canPrint($$) {
+    my ($for, $date) = @_;
+    
+    # can exit immediately if not set
+    return 1 unless $for;
+
+    if ($o_for) {
+        return 0 if ($for !~ /$o_for/i);
+    }
+    
+    if ($o_datefrom) {
+        return 0 if (&convDate($o_datefrom)>&convDate($date));
+    }
+    
+    if ($o_dateto) {
+        return 0 if (&convDate($o_dateto)<=&convDate($date));
+    }
+    
+    return 1;
+}
+
+# converts a date from "dd-Mmm-yyyy" format to "yyyymmdd"
+# returns it unchanged if it's not in the correct format
+sub convDate($) {
+    my %months=(
+        'jan' => '01',
+        'feb' => '02',
+        'mar' => '03',
+        'apr' => '04',
+        'may' => '05',
+        'jun' => '06',
+        'jul' => '07',
+        'aug' => '08',
+        'sep' => '09',
+        'oct' => '10',
+        'nov' => '11',
+        'dec' => '12',
+    );
+    my $outdate;
+    my $indate=shift;
+    return $indate unless ($indate=~/^\s*(\d{2})-(\w{3})-(\d{4})\s*$/i);
+    
+    $outdate=$3.$months{lc($2)}.$1;
+    return $outdate;
+}
+
+__END__
+
+=head1 NAME
+
+timesheet - Basic timesheet management
+
+=head1 SYNOPSIS
+
+timesheet [options]
+
+ Options:
+   --help           this message
+   --for=PATTERN    filter timesheet by "For" lines matching PATTERN
+   --datefrom=DATE  display data from DATE (inclusive)
+   --dateto=DATE    display date until DATE (exclusive)
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<--help>
+
+Prints a brief help message and exits.
+
+=item B<--for=PATTERN>
+
+Filter timesheet by "For" lines. May be abbreviated to "-f PATTERN" or "-f=PATTERN".
+
+=item B<--datefrom=DATE>
+
+Display data from DATE (inclusive). May be abbreviated to "-df DATE" or "-df=DATE".
+
+=item B<--dateto=DATE>
+
+Display data until DATE (exclusive). May be abbreviated to "-dt DATE" or "-dt=DATE".
+
+=back
+
+=head1 DATA FORMAT
+
+The timesheet data is held in ~/.timesheet/tsdata, and has a simple ascii-based file format. Each line starts with a single upper-case character identifying its type, as described below.
+
+=over 8
+
+=item S: Service description
+
+=item R: Hourly rate
+
+=item F: "For" (appears in brackets after date)
+
+=item D: Date
+
+=item H: hours
+
+=item W: begin a new week (no data)
+
+=back
+
+Certain commands implicitly output data when the timesheet is displayed. These are (currently) S, D, H, and W. Note that you should set "For" I<before> using Date if you want it to be output.
+
+=head1 AUTHOR
+
+David Ingram (dmi04@doc.ic.ac.uk)
+
+=cut

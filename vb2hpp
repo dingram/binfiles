@@ -1,0 +1,122 @@
+#!/usr/bin/perl
+
+# TODO: fix Implements and Handles at the end
+# TODO: add properties (?)
+# TODO: fix Delegate subs (ignore?)
+
+# Commonly-used bits (non-matching)
+$scopes="(?:Public|Private|Friend|Protected)";
+$funckeywords="(?:Shared|Overloads|Shadows|Overrides|Overridable|Delegate)";
+$var="(?:[a-zA-Z_][0-9a-zA-Z._]*(?:\\(\\d*\\))?)";
+$varnb="(?:[a-zA-Z_][0-9a-zA-Z._]*)";
+$svar="(?:(?:[a-zA-Z_][0-9a-zA-Z._]*)|\".*?\")";
+$param="(?:(?:Optional)?\\s*(?:ByVal|ByRef)?\\s*$var\\s+As\\s+$var\\s*(?:=\\s*$svar)?)";
+$post="(?:(?:Implements)\\s+$var(?:,\\s*$var)*)";
+
+# Commonly-used bits (matching)
+$mscopes="(Public|Private|Friend)";
+$mfunckeywords="(Shared|Overloads|Shadows)";
+$mvar="([a-zA-Z_][0-9a-zA-Z._]*)";
+$msvar="((\")?[a-zA-Z_][0-9a-zA-Z._]*(?(2)\")?)";
+$mparam="(?:(Optional)?\\s*(ByVal|ByRef)?\\s*$mvar\\s+As\\s+$mvar\\s*(?:=\\s*$msvar)?)";
+
+$curclass="";
+
+while (<>) {
+	s/^\s*'.*$//;
+	s/^\s+/\t/;
+
+	if (/^\s*$mscopes?\s*Class\s+$mvar\s*$/) {
+		$scope=$1;
+		$name=$2;
+		$scope=~tr/A-Z/a-z/;
+		
+		print "$scope class $name {\n";
+		$curclass=$name;
+		
+	} elsif (/^\s*End Class/) {
+		print "}; // [$curclass]\n\n";
+	} elsif (/^\s*End (?:Sub|Function)/) {
+		print ";\n";
+	} elsif (/^\s*(?:$scopes\s+)?(?:$funckeywords\s+)*Sub\s+$var\s*\(\s*$param?(?:,\s*$param\s*)*\s*\)\s*$post?\s*$/) {
+		## Subroutine
+		#
+		/^\s*($scopes\s+)?($funckeywords\s+)*Sub\s+($var)\s*\(\s*($param?(?:,\s*$param\s*)*)\s*\)\s*$post?\s*$/;
+		$scope=(defined $1)?$1:"";
+		$keywords=(defined $2)?$2:"";
+		$func=$3;
+		$args=$4;
+
+		$scope=~s/\s//g;
+		$scope=~tr/A-Z/a-z/;
+		$scope.=" " unless ($scope eq "");
+
+		$keywords=~s/^\s+//g;
+		$keywords=~s/\s+$//g;
+		$keywords=~s/Shared/static/g;
+		$keywords=~s/Overloads/\/*Overloads*\//g;
+		$keywords=~s/Shadows/\/*Shadows*\//g;
+		$keywords=~s/Overrides/\/*Overrides*\//g;
+		$keywords=~s/Overridable/\/*Overridable*\//g;
+		$keywords=~s/Delegate/\/*Delegate*\//g;
+		$keywords=~s/\s+/ /g;
+		$keywords.=" " unless ($keywords eq "");
+
+		$func=~s/\s//g;
+
+		$args=~s/ByVal\s+//g;
+		$args=~s/ByRef\s+/*/g;
+		$args=~s/Optional\s+//g;
+		$args=~s/($var)\s+As\s+($varnb)(\(\d*\))?/$2 $1$3/g;
+		$args=~tr/()/[]/;
+
+		print "\t$scope$keywords";
+		print (($func eq "New")?$curclass:"void $func");
+		print "($args)";
+		
+	} elsif (/^\s*(?:$scopes\s+)?(?:$funckeywords\s+)*Function\s+$var\s*\(\s*$param?(?:,\s*$param\s*)*\s*\)\s+As\s+$var\s*$post?\s*$/) {
+		## Function
+		#
+		/^\s*($scopes\s+)?($funckeywords\s+)*Function\s+($var)\s*\(\s*($param?(?:,\s*$param\s*)*)\s*\)\s+As\s+($var)\s*$post?\s*$/;
+		$scope=(defined $1)?$1:"";
+		$keywords=(defined $2)?$2:"";
+		$func=$3;
+		$args=$4;
+		$type=$5;
+
+		$scope=~s/\s//g;
+		$scope=~tr/A-Z/a-z/;
+		$scope.=" " unless ($scope eq "");
+
+		$keywords=~s/^\s+//g;
+		$keywords=~s/\s+$//g;
+		$keywords=~s/Shared/static/g;
+		$keywords=~s/Overloads/\/*Overloads*\//g;
+		$keywords=~s/Shadows/\/*Shadows*\//g;
+		$keywords=~s/Overrides/\/*Overrides*\//g;
+		$keywords=~s/Overridable/\/*Overridable*\//g;
+		$keywords=~s/Delegate/\/*Delegate*\//g;
+		$keywords=~s/\s+/ /g;
+		$keywords.=" " unless ($keywords eq "");
+
+		$func=~s/\s//g;
+
+		$args=~s/ByVal\s+//g;
+		$args=~s/ByRef\s+/*/g;
+		$args=~s/Optional\s+//g;
+		$args=~s/($var)\s+As\s+($var)/$2 $1/g;
+		$args=~tr/()/[]/;
+
+		$type=~s/\s//g;
+
+		print "\t$scope$keywords$type $func($args)";
+		
+	} elsif (/\b(?:Sub|Function)\b/) {
+		next if (/Exit (?:Sub|Function)/);
+		next if /^\s*($scopes\s+)?\s*(?:Declare)\s*(?:Sub|Function)\s+($var)/;
+		s/^\s+//;
+		chomp;
+		print STDERR " \033[1;31m***\033[0;31m Unknown signature: $_\033[0m\n";
+		print "\t// *** Untranslatable: $_\n";
+	}
+}

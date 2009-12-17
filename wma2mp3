@@ -1,0 +1,75 @@
+#!/bin/bash
+
+. /sbin/functions.sh
+
+if [[ $# < 0 ]]; then
+  eerror "You must give a filename to convert!"
+  exit 1
+fi
+
+MEDIAFILE=$1
+if [[ ! -r "$MEDIAFILE" ]]; then
+  eerror "The input file ($MEDIAFILE) does not exist!"
+  exit 1
+fi
+
+MP3FILE="${MEDIAFILE%%.wma}.mp3"
+if [[ -e "$MP3FILE" ]]; then
+  eerror "The output file ($MP3FILE) already exists!"
+  exit 1
+fi
+
+
+#ebegin "Creating temporary pipe"
+MYPIPE=`mktemp -u` || {
+  eend 1
+  exit 1
+}
+#eindent
+#einfo "Pipe filename: $MYPIPE"
+#eoutdent
+mkfifo $MYPIPE || {
+  eend 1
+  exit 1
+}
+eend 0
+
+
+einfo "Converting file..."
+eindent
+einfo "Input:  $MEDIAFILE"
+einfo "Output: $MP3FILE"
+einfo "Starting LAME..."
+lame -h $MYPIPE "$MP3FILE" >&/dev/null &
+LAMEPID=$!
+ebegin "Reading input file"
+mplayer -vo null -vc dummy -ao pcm:waveheader:file=$MYPIPE "$MEDIAFILE" >&/dev/null
+MSTATUS=$?
+eend $MSTATUS
+if [[ $MSTATUS != 0 ]]; then
+  ebegin "Killing LAME"
+  kill -9 $LAMEPID
+  eend $?
+else
+  ebegin "Waiting for LAME to finish"
+  wait $LAMEPID
+  LSTATUS=$?
+  eend $LSTATUS
+fi
+eoutdent
+
+
+einfo "Cleaning up..."
+eindent
+ebegin "Removing pipe"
+rm -f $MYPIPE
+eend $?
+
+if [[ $MSTATUS == 0 && $LSTATUS == 0 && $REMOVE == 1 ]]; then
+  ebegin "Removing old file"
+  rm -f "$MEDIAFILE"
+  eend $?
+fi
+
+eoutdent
+echo

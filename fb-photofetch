@@ -1,0 +1,23 @@
+#!/bin/bash
+
+PHOTOLIST="${1:-/home/dave/facebook/people/photolist}"
+xIFS="$IFS"
+IFS="
+"
+
+cd ~/facebook/people
+for i in $(< "${PHOTOLIST}"); do
+  [[ "${i:0:1}" == "#" ]] && echo "Skipping..." && continue
+  p=`echo "${i}" | sed -r 's/"([^"]+)".*/\1/'`
+  f=`echo "${i}" | sed -r 's/.*,([^,]+)$/\1/'`
+  mkdir "${p}" 2>/dev/null
+  (
+    cd "${p}"
+    [[ -s "$(basename $f)" ]] && exit 1
+    echo "${i}"
+    wget -nv -nc --user-agent="Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.8.1) Gecko/20060601 Firefox/2.0" "${f}"
+  ) &&
+  sleep $(( ${RANDOM} % 15 + 5 )) || echo "Skipping $p..."
+done
+
+IFS="${xIFS}"

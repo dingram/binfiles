@@ -1,0 +1,20 @@
+#!/bin/bash
+if [ $# == 0 ]
+then
+    echo "Use: make_psp_movie video1 video2 video3 ..."
+fi
+target="/tmp/`echo $LOGNAME`/pspmovies"
+mkdir -p "$target"
+for m in "$@"
+do
+    echo "-------------------"
+    echo "Start converting $m"
+    echo "-------------------"
+    output="10001"
+    while [ -f "$target/M4V${output}.MP4" ]
+    do
+        let "output += 1"
+    done
+    ffmpeg -i "$m" -f psp -r 29.970030 -b 768 -ar 24000 -ab 64 -s 320x240  "${target}/M4V${output}.MP4"
+    ffmpeg -y -i "$m" -f image2 -ss 5 -vframes 1 -s 160x120 -an "${target}/M4V${output}.THM"
+done

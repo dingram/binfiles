@@ -1,0 +1,4 @@
+id="$1"
+url=$(curl -s 'http://www.escapistmagazine.com/global/castfire/flv/'"$id"'?parent=Clip:%20baseUrl%20undefined,%20fileName%20'"$id"',%20start%20undefined,%20end%20undefined,%20type%20undefined&version=ThemisMedia1.0' | cut -d\= -f2- | sed -e 's/%3A/:/g; s+%2F+/+g;')
+out=$( basename "${url}" | sed -re 's/-[0-9]+\././' )
+wget -c "$url" -O "$out"

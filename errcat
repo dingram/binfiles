@@ -1,0 +1,13 @@
+#!/bin/sh -
+#
+# Trivial script to paper over the fact that csh, unlike sh, can't write
+# purely to standard error. Acts like cat, but with what would have been
+# standard output redirected to standard error.
+#
+# So, for example, you do "errcat blah"    in a csh-script to mean the same as
+#                         "cat blah >&2"   in a sh-script;
+#                  you do "..... | errcat" in a csh-script to mean the same as
+#                         "..... >&2"      in a sh-script;
+#                  etc.
+#
+exec /bin/cat "$@" >&2

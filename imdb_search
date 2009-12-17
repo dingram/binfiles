@@ -1,0 +1,251 @@
+#!/usr/bin/perl -w
+use LWP::UserAgent;
+use HTML::Entities;
+
+# Search IMDB for info about films
+# probably needs neatening up here and there
+# comments? who needs comments? perl is easy to understand...
+
+$search=$titlecode=$url="";
+$v_col=1;
+
+sub evalarg() {
+  local $arg=shift;
+
+  if ( ($arg eq "-c") || ($arg eq "--color") ) {
+    $v_col=1;
+  } elsif ( ($arg eq "-C") || ($arg eq "--no-color") ) {
+    $v_col=0;
+  #} elsif ( ($arg eq "-f") || ($arg eq "--filter") ) {
+  #  $v_filter[@v_filter]=shift @ARGV;
+  } elsif ( ($arg eq "-h") || ($arg eq "--help") ) {
+    select(STDERR);
+    print "Usage:\n   $0 [OPTIONS]... [\"title to search\"]\n\n";
+    print "    -c,--color     Coloured output (default)\n";
+    print "  Note: capitalised versions of the above short options, or\nadding \"no-\" in the long option (e.g. --no-color) inverts the behaviour\n";
+    print "\n";
+
+    exit 1;
+  } else  {
+    print STDERR "Invalid argument $arg\n";
+    exit 1;
+  }
+}
+
+
+# scan commandline
+while ($#ARGV>=0) {
+  $arg=shift;
+
+  if (defined $arg) {
+    if ($arg =~ /^--/) {
+      # parse arguments
+      &evalarg($arg);
+
+    } elsif ($arg =~ /^-/) {
+      # parse arguments
+      $arg =~ s/-//g;
+
+      if (length($arg)>1) {
+        for ($i=0; $i<length($arg); $i++) {
+	  my $v = substr($arg, $i, 1);
+	  &evalarg("-$v");
+	}
+      } else {
+        &evalarg("-$arg");
+      }
+
+    } else {
+      # set search item
+      $search=$arg;
+    }
+  }
+}
+
+while ($search =~ /^\s*$/igsm) {
+  print "Enter film title to search for: ";
+  $search=<STDIN>;
+  chomp $search;
+}
+
+$ua = LWP::UserAgent->new;
+$req = HTTP::Request->new(GET => "http://uk.imdb.com/find?q=${search}");
+$res = $ua->request($req);
+$rply = $res->as_string;
+decode_entities($rply);
+$rply =~ s/<script[^>]*>.*?<\/script>//imsg;
+$rply =~ s/<map[^>]*>.*?<\/map>//imsg;
+$rply =~ s/.*<html>/<html>/imsg;
+if ($rply =~ /<title>.*search.*<\/title>/i) {
+  @matches = ($rply =~ /<li>\s*(<a href="\/title\/.*?)\s*<\/li>/imsg);
+  #print $rply;
+  #print "-----------------------------------\n";
+
+  $idx=1;
+  %titles=();
+  %urls=();
+  foreach $m (@matches) {
+    $a=$m;
+    $u=$m;
+    $u=~s/<a.*?href="(.*?)">.*/$1/ig;
+    $a=~s/<a.*?>(.*)<\/a>(.*)/$1$2/ig;
+    $a=~s/<[^>]+>//ig;
+    print "$idx) $a\n";
+    $titles{$idx}=$a;
+    $urls{$a}=$u;
+    $idx++;
+  }
+
+  $valid=0;
+  $in="";
+  while (!$valid) {
+    print "Choose a film: ";
+    $in=<STDIN>;
+    chomp $in;
+    $ini=0+$in;
+    $valid=($ini < $idx && $ini > 0)?1:0;
+    next unless ($valid);
+  }
+  #print $urls{$titles{$in}} . "\n";
+
+  $req = HTTP::Request->new(GET => "http://uk.imdb.com" . $urls{$titles{$in}});
+  $res = $ua->request($req);
+  $rply = $res->as_string;
+  decode_entities($rply);
+  $rply =~ s/<script[^>]*>.*?<\/script>//imsg;
+  $rply =~ s/<map[^>]*>.*?<\/map>//imsg;
+  $rply =~ s/.*<html>/<html>/imsg;
+  print "\n-----------------------------------------------------\n";
+}
+
+$url=$res->base;
+$titlecode=$url;
+$titlecode=~s/.*\/title\/([^\/]+)\/.*/$1/;
+
+$rply =~ s/.*(<h1><strong class="title">)/$1/imsg;
+$rply =~ s/\s*<style type="text\/css">.*//imgs;
+
+$title=$rply;
+if ($title ne "") {
+  $title=~s/.*<h1><strong class="title">(.*?)<\/strong>.*/$1/imsg;
+  $title=~s/\s+/ /ig;
+  $title=~s/^\s+(.*)\s+$/$1/ig;
+  $title=~s/<[^>]+>//ig;
+}
+
+$genre=$rply;
+if ($genre ne "") {
+  $genre=~s/.*<b class="ch">Genre:<\/b>(.*?)<br><br>.*/$1/imsg;
+  $genre=~s/\(more\)//ig;
+  $genre=~s/\s+/ /ig;
+  $genre=~s/^\s+(.*)\s+$/$1/ig;
+  $genre=~s/<[^>]+>//ig;
+}
+
+$tagline=($rply =~ /<b class="ch">Tagline:<\/b>/)?$rply:"";
+if ($tagline ne "") {
+  $tagline=~s/.*<b class="ch">Tagline:<\/b>(.*?)<br><br>.*/$1/imsg;
+  $tagline=~s/\(more\)//ig;
+  $tagline=~s/\s+/ /ig;
+  $tagline=~s/^\s+(.*)\s+$/$1/ig;
+  $tagline=~s/<[^>]+>//ig;
+}
+
+$plot=($rply =~ /<b class="ch">Plot Outline:<\/b>/)?$rply:"";
+if ($plot ne "") {
+  $plot=~s/.*<b class="ch">Plot Outline:<\/b>(.*?)<br><br>.*/$1/imsg;
+  $plot=~s/\(more\)//ig;
+  $plot=~s/\(view trailer\)//ig;
+  $plot=~s/\s+/ /ig;
+  $plot=~s/^\s+(.*)\s+$/$1/ig;
+  $plot=~s/<[^>]+>//ig;
+}
+
+$trailer=($rply =~ /\(view trailer\)/imsg)?"http://uk.imdb.com/title/$titlecode/trailers":"";
+
+$status=($rply =~ /<b class="ch">Production Notes\/Status:<\/b>/)?$rply:"";
+if ($status ne "") {
+  $status=~s/.*<b class="ch">Production Notes\/Status:<\/b>(.*?)<br><br>.*/$1/imsg;
+  $status=~s/.*Status:<\/td><td[^>]*>(.*?)<\/td>.*?<td[^>]*>Status Updated:<\/td><td[^>]*>(.*?)<\/td>.*/$1 (updated $2)/sm;
+  $status=~s/\(more\)//ig;
+  $status=~s/\s+/ /ig;
+  $status=~s/^\s+(.*)\s+$/$1/ig;
+  $status=~s/<[^>]+>//ig;
+}
+
+$urate=($rply =~ /<b class="ch">User Rating:<\/b>/)?$rply:"";
+if ($urate ne "") {
+  $urate=~s/.*<b class="ch">User Rating:<\/b>(.*?)<br><br>.*/$1/imsg;
+  $urate=~s/<[^>]+>//ig;
+  #$urate=~s/<b>(.*?)<\/b>/$1/ig;
+  $urate=~s/^\s+(.*)\s+$/$1/ig;
+  $urate=~s/\s+/ /ig;
+}
+
+$mpaa=($rply =~ /<b class="ch"><a href="\/mpaa">MPAA<\/a>:<\/b>/)?$rply:"";
+if ($mpaa ne "") {
+  $mpaa=~s/.*<b class="ch"><a href="\/mpaa">MPAA<\/a>:<\/b>\s*(.*?)<br>.*/$1/imsg;
+  $mpaa=~s/\(more\)//ig;
+  $mpaa=~s/\s+/ /ig;
+  $mpaa=~s/^\s+(.*)\s+$/$1/ig;
+  $mpaa=~s/<[^>]+>//ig;
+}
+
+$runtime=($rply =~ /<b class="ch">Runtime:<\/b>/)?$rply:"";
+if ($runtime ne "") {
+  $runtime=~s/.*<b class="ch">Runtime:<\/b>(.*?)<br>.*/$1/imsg;
+  $runtime=~s/\(more\)//ig;
+  $runtime=~s/\s+/ /ig;
+  $runtime=~s/^\s+(.*)\s+$/$1/ig;
+  $runtime=~s/<[^>]+>//ig;
+}
+
+$country=($rply =~ /<b class="ch">Country:<\/b>/)?$rply:"";
+if ($country ne "") {
+  $country=~s/.*<b class="ch">Country:<\/b>(.*?)<br>.*/$1/imsg;
+  $country=~s/\(more\)//ig;
+  $country=~s/\s+/ /ig;
+  $country=~s/^\s+(.*)\s+$/$1/ig;
+  $country=~s/<[^>]+>//ig;
+}
+
+$lang=($rply =~ /<b class="ch">Language:<\/b>/)?$rply:"";
+if ($lang ne "") {
+  $lang=~s/.*<b class="ch">Language:<\/b>(.*?)<br>.*/$1/imsg;
+  $lang=~s/\(more\)//ig;
+  $lang=~s/\s+/ /ig;
+  $lang=~s/^\s+(.*)\s+$/$1/ig;
+  $lang=~s/<[^>]+>//ig;
+}
+
+$cert=($rply =~ /<b class="ch">Certification:<\/b>/)?$rply:"";
+if ($cert ne "") {
+  $cert=~s/.*<b class="ch">Certification:<\/b>(.*?)<br>.*/$1/imsg;
+  $cert=~s/.*UK:(.*?) .*$/$1/;
+  $cert=~s/\(more\)//ig;
+  $cert=~s/\s+/ /ig;
+  $cert=~s/^\s+(.*)\s+$/$1/ig;
+  $cert=~s/<[^>]+>//ig;
+  if ($cert ne "" && $v_col) {
+    if ($cert eq "U") { $cert=chr(27) . "[1;32mU" . chr(27) . "[0m"; }
+    elsif ($cert eq "PG") { $cert=chr(27) . "[32mPG" . chr(27) . "[0m"; }
+    elsif ($cert eq "12") { $cert=chr(27) . "[33m12" . chr(27) . "[0m"; }
+    elsif ($cert eq "12A") { $cert=chr(27) . "[33m12A" . chr(27) . "[0m"; }
+    elsif ($cert eq "15") { $cert=chr(27) . "[1;33m15" . chr(27) . "[0m"; }
+    elsif ($cert eq "18") { $cert=chr(27) . "[1;31m18" . chr(27) . "[0m"; }
+  }
+}
+
+print "\n";
+print "Title:            $title\n";
+print "Genre:            $genre\n";
+print "Tagline:          $tagline\n" unless ($tagline eq "");
+print "Plot:             $plot\n" unless ($tagline eq "");
+print "Trailer:          $trailer\n" unless ($trailer eq "");
+print "Status:           $status\n" unless ($status eq "");
+print "User Rating:      $urate\n" unless ($urate eq "");
+print "MPAA:             $mpaa\n" unless ($mpaa eq "");
+print "Runtime:          $runtime\n" unless ($runtime eq "");
+print "Country/Language: $country / $lang\n" unless ($country eq "" || $lang eq "");
+print "UK Cert:          $cert\n" unless ($cert eq "");
+print "\n";

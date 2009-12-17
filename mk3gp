@@ -1,0 +1,49 @@
+#!/bin/sh
+
+FILE="$1"
+shift
+
+ORIG="${FILE}"
+
+# remove file suffixes
+FILE=${FILE%.avi}
+FILE=${FILE%.flv}
+FILE=${FILE%.mpg}
+FILE=${FILE%.mpeg}
+
+rm -f "__tmp_${FILE}.avi"
+rm -f "__tmp_${FILE}.wav"
+
+mencoder "${ORIG}" \
+    -nosound \
+    -ovc lavc \
+    -lavcopts vcodec=mpeg4 \
+    -sws 2 \
+    -vf expand=176:144,scale=176:-2 \
+    -o "__tmp_${FILE}.avi" \
+    $*
+
+#mplayer -vc null -vo null -ao pcm:fast:file="__tmp_${FILE}.wav" -af volume=+16db:sc "$ORIG"
+mplayer -vc null -vo null -ao pcm:fast:file="__tmp_${FILE}.wav" "$ORIG"
+
+normalize --peak "__tmp_${FILE}.wav"
+
+rm -f "${FILE}.3gp"
+
+ffmpeg \
+    -i "__tmp_${FILE}.avi" \
+    -i "__tmp_${FILE}.wav" \
+    -ac 1 \
+    -ar 16000 \
+    -ab 15.85 \
+    -vcodec h263 \
+    -acodec libamr_wb \
+    -s 176x144 \
+    -r 25 \
+    -qscale 4 \
+    -ab 64 \
+    -map 0.0 -map 1.0 \
+    "${FILE}.3gp"
+
+rm -f "__tmp_${FILE}.avi"
+rm -f "__tmp_${FILE}.wav"

@@ -1,0 +1,25 @@
+#!/usr/bin/perl -w
+
+while (<>) {
+	if (/^\s*class/ || /^\s*function/ || /^\s*var/ || /define/) {
+		s/\s*#.*$//;
+		s/^\s+/\t/;
+
+		if (/^\s*function/) {
+			s/\$/var /g;
+			s/&var/var */g;
+			s/function &/function */g;
+			s/function (\*?)([a-zA-Z0-9_]+)\s*\(\s*([^)]*)\s*\).*$/function $1$2 ($3);/;
+		} elsif (/^\s*class/) {
+			s/\s*extends\s*/ : public /;
+		} elsif (/^\s*var/) {
+			s/\$//;
+		} elsif (/define/) {
+			s/define\(\s*'?([^,]+?)'?\s*,\s*([^)]+)\s*\);/#define $1 = $2;/;
+		} else {
+			print "** Unknown:\n";
+		}
+		print;
+	}
+}
+print "};\n";

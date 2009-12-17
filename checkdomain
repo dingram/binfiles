@@ -1,0 +1,35 @@
+#!/bin/bash
+
+domain="${1}"
+shift
+
+if [[ -z "${domain}" ]]; then
+  echo "Usage: $0 <domain> [<suffix> [...]]"
+  echo
+  echo "Valid suffixes: co.uk org.uk me.uk eu com net org info biz eu.com"
+  exit 1
+fi
+
+if [[ "$#" == 0 ]]; then
+  tld=''
+  tld="${tld}&ttld%5B%5D=co.uk"
+  tld="${tld}&ttld%5B%5D=org.uk"
+  tld="${tld}&ttld%5B%5D=me.uk"
+  tld="${tld}&ttld%5B%5D=eu"
+  tld="${tld}&ttld%5B%5D=com"
+  tld="${tld}&ttld%5B%5D=net"
+  tld="${tld}&ttld%5B%5D=org"
+  tld="${tld}&ttld%5B%5D=info"
+  tld="${tld}&ttld%5B%5D=biz"
+  tld="${tld}&ttld%5B%5D=eu.com"
+else
+  tld=$(echo "$@" | perl -e 'while(<>) { s/^\.//; $a .= ",$_"; } print join "&ttld%5B%5D=", split /[ ,]+/, $a;')
+fi
+
+a="action=check${tld}&cSSld=${domain}"
+
+reply=$(curl -skd "${a}" https://www.krystal.co.uk/spincheck.php)
+#reply=$(<krystal-test.html)
+
+echo
+echo "${reply}" | perl -ne 'next unless /<!--row1-->/; s#^[^<]+<![^<]+<tr#<tr#; s#<!--row1--></table.+$##; s#<tr class=row._.><td>&nbsp;<[^>]+></td><td align=left><b>([^<]+)&nbsp;</b></td><td><b><font[^>]+>([^<]+)</font></b>.+?</tr>#$1 . ":" . (" " x (8 - (length($1) - length("'${domain}'")))) . $2 . "\n"#eg; s#Available#\033[1;32mAvailable!\033[m#g; s#Unavailable#\033[31mUnavailable\033[m#g; print;'

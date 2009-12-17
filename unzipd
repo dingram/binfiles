@@ -1,0 +1,3 @@
+#!/bin/bash
+f="$*"
+echo unzip "$f" -d "${f//%.zip/}" >&2

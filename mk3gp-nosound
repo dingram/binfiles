@@ -1,0 +1,45 @@
+#!/bin/sh
+
+FILE="$1"
+shift
+
+ORIG="${FILE}"
+
+# remove file suffixes
+FILE=${FILE%.avi}
+FILE=${FILE%.flv}
+FILE=${FILE%.wmv}
+FILE=${FILE%.mpg}
+FILE=${FILE%.mpeg}
+
+rm -f "__tmp_${FILE}.avi"
+
+#mencoder "${ORIG}" \
+#    -nosound \
+#    -ovc lavc \
+#    -lavcopts vcodec=mpeg4:vhq \
+#    -sws 2 \
+#    -vf expand=176:144,spp,scale=176:-2 \
+#    -o "__tmp_${FILE}.avi" \
+#    $* > /dev/null
+
+mencoder "${ORIG}" \
+    -nosound \
+    -ovc lavc \
+    -lavcopts vcodec=mpeg4:vqscale=2:mbd=0:trell:v4mv \
+    -sws 2 \
+    -vf expand=176:144,spp,scale=176:-2 \
+    -o "__tmp_${FILE}.avi" \
+    $* > /dev/null
+
+rm -f "${FILE}.3gp"
+
+ffmpeg \
+    -i "__tmp_${FILE}.avi" \
+    -an \
+    -s 176x144 \
+    -r 25 \
+    -qscale 2 \
+    "${FILE}.3gp" > /dev/null
+
+rm -f "__tmp_${FILE}.avi"

@@ -1,0 +1,11 @@
+#!/bin/sh -
+#
+# Trivial script to paper over the fact that csh, unlike sh, can't write
+# purely to standard error. Acts like echo, but with what would have been
+# standard output redirected to standard error.
+#
+# So, for example, you do "errecho blah"  in a csh-script to mean the same as
+#                         "echo blah >&2" in a sh-script.
+#
+echo "$@" >&2
+exit $?

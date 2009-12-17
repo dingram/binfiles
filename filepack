@@ -1,0 +1,4 @@
+#!/bin/bash
+
+cd /home/dave/progs/file_pack
+java FilePack $*

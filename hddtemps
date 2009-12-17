@@ -1,0 +1,1 @@
+for i in a b c; do echo -n sd$i:; sudo smartctl --all /dev/sd$i | grep \^194 | cut -c87-90; done

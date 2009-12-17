@@ -1,0 +1,39 @@
+#!/usr/bin/perl -w
+use warnings;
+use strict;
+
+my $page='';
+
+while (<>) {
+  # Fix body tag
+  s/<body[^>]+>/<body>/gi;
+  # Remove external images
+  s#<img[^>]+src="http://[^"]+"[^>]*>##gi;
+  # Remove images outside the tree
+  s#<img[^>]+src="../../[^>]+>##g;
+  # Remove banner ads
+  s/<img[^>]+src="[^"]+banne[^"]+"[^>]*>//gi;
+  s/<img[^>]+src="[^"]+webbuttonhori[^"]+"[^>]*>//gi;
+
+  # Add to output
+  $page .= $_;
+}
+
+# Remove inline stylesheet
+$page =~ s#<style[^>]*>.+?</style>##imsg;
+# Remove scripts
+$page =~ s#<script[^>]*>.+?</script>##imsg;
+# Remove hit counter text
+$page =~ s#This\s+page\s+has\s+been[^<]*##imsg;
+# Remove links outside tree
+$page =~ s#<a[^>]+href="../../[^>]+>.+?</a>##imsg;
+# Remove external links
+$page =~ s#<a[^>]+href="http://[^>]+streetmap[^>]+>(.+?)</a>#$1#imsg;
+# Remove external links
+$page =~ s#<input[^>]+type="image"[^>]+src="https?://[^>]+>##imsg;
+$page =~ s#<a[^>]+href="https?://[^>]+>.+?</a>##imsg;
+# Remove empty links
+$page =~ s#<a[^>]+>\s*</a>##imsg;
+
+# Output clean page
+print $page;
