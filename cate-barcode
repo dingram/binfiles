@@ -1,0 +1,3 @@
+#!/bin/sh
+[[ -z "$2" || -n "$3" ]] && echo "Usage: cate-barcode code outputfile" && exit 1
+barcode -b $1 -g 127x61+119+528 -e 128b -o $2

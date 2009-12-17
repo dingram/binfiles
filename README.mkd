@@ -1,0 +1,10 @@
+Introduction
+============
+
+These scripts are all archived -- I never expect to use them again!
+
+This branch also includes scripts created during my time at [Imperial
+College][]'s [Department of Computing][].
+
+  [Imperial College]: http://www.imperial.ac.uk/
+  [Department of Computing]: http://www.doc.ic.ac.uk/

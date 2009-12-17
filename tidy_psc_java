@@ -1,0 +1,35 @@
+#!/usr/bin/perl
+#
+# Tidys up the Java code provided by the lab setters (psc, most likely)
+# Matthew Blissett, 2005-01-22
+#
+
+print STDERR "CHECK this doesn't mess up your Java file, I'm not promising anything!\n\n";
+
+while (<>) {
+
+    # Change '\t' to '    '
+    s/\t/    /g;
+
+    # Correct ' ;' to ';'
+    s/ ;/;/g;
+
+    # Change '      ' to '            '
+    #        '    '   to '        '
+    #        '  '     to '    '
+    s/^(\s*)(\S)/$1$1$2/;
+
+    # Change '( arg' to '(arg'
+    s/\(\s+(\S+)/\($1/;
+    # Change 'func (' to 'func('
+    s/\s*\(/ \(/;
+    # Change 'arg )' to 'arg)'
+    s/(\S+)\s+\)/$1\)/;
+
+    # Change '    func () {' to
+    #        '    func ()
+    #             {'
+    s/(\s*)(.*) {/$1$2\n$1\{/;
+
+    print;
+}

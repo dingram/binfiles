@@ -1,0 +1,6 @@
+#!/bin/bash
+
+#num=`echo "$(($RANDOM % 4 + 1))"`
+num=`echo "$(($RANDOM % 2 + 3))"`
+echo -e " \e[1;32m*\e[0m Attempting to connect to \e[33mshell${num}\e[0m..."
+ssh shell${num} $@
